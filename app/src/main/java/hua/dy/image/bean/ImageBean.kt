@@ -5,27 +5,17 @@ import android.os.Parcelable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import hua.dy.image.utils.FileType
 
-const val PNG = 0
 
-const val JPG = 1
+val ImageBean.isAnimatedImage get() = isGif || isWebp
+val ImageBean.isGif get() = fileType == FileType.GIF
 
-const val GIF = 2
+val ImageBean.isWebp get() = fileType == FileType.WEBP
 
-const val Other = Int.MAX_VALUE
+val ImageBean.isPng get() = fileType == FileType.PNG
 
-val String?.type get() = when (this) {
-    "png" -> PNG
-    "gif" -> GIF
-    "jpg" -> JPG
-    else -> Other
-}
-
-val ImageBean.isGif get() = fileType == GIF
-
-val ImageBean.isPng get() = fileType == PNG
-
-val ImageBean.isJpg get() = fileType == JPG
+val ImageBean.isJpg get() = fileType == FileType.JPEG
 
 
 @Entity("dy_image")
@@ -39,7 +29,7 @@ data class ImageBean(
     @ColumnInfo(name = "file_time")
     val fileTime: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "file_type")
-    val fileType: Int = PNG,
+    val fileType: FileType = FileType.PNG,
     @ColumnInfo(name = "file_name", defaultValue = "")
     val fileName: String = "",
     @ColumnInfo(name = "second_menu", defaultValue = "")
@@ -54,7 +44,7 @@ data class ImageBean(
         parcel.readString() ?:"",
         parcel.readLong(),
         parcel.readLong(),
-        parcel.readInt(),
+        parcel.readSerializable() as FileType,
         parcel.readString() ?: "",
         parcel.readString() ?:"",
         parcel.readLong(),
@@ -70,7 +60,7 @@ data class ImageBean(
         dest.writeString(imagePath)
         dest.writeLong(fileLength)
         dest.writeLong(fileTime)
-        dest.writeInt(fileType)
+        dest.writeSerializable(fileType)
         dest.writeString(fileName)
         dest.writeString(secondMenu)
         dest.writeLong(scanTime)

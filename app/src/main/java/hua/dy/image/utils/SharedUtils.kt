@@ -4,6 +4,7 @@ import androidx.preference.PreferenceManager
 import splitties.init.appCtx
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
+import androidx.core.content.edit
 
 private val sharedPreference = PreferenceManager.getDefaultSharedPreferences(appCtx)
 
@@ -35,17 +36,17 @@ class SharedPreferenceEntrust<T>(
 
     @Suppress("UNCHECKED_CAST")
     private fun setPreferenceValue(key: String, value: T) {
-        val edit = sharedPreference.edit()
-        when (value) {
-            is String -> edit.putString(key, value)
-            is Long -> edit.putLong(key, value)
-            is Set<*> -> edit.putStringSet(key, value as Set<String>)
-            is Boolean -> edit.putBoolean(key, value)
-            is Float -> edit.putFloat(key, value)
-            is Int -> edit.putInt(key, value)
-            else -> throw IllegalArgumentException("Type Error, cannot be saved!")
+        sharedPreference.edit {
+            when (value) {
+                is String -> putString(key, value)
+                is Long -> putLong(key, value)
+                is Set<*> -> putStringSet(key, value as Set<String>)
+                is Boolean -> putBoolean(key, value)
+                is Float -> putFloat(key, value)
+                is Int -> putInt(key, value)
+                else -> throw IllegalArgumentException("Type Error, cannot be saved!")
+            }
         }
-        edit.apply()
     }
 
 }

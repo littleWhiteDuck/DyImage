@@ -9,7 +9,7 @@ import splitties.init.appCtx
 
 @Database(
     entities = [ImageBean::class],
-    version = 3,
+    version = 1,
 )
 abstract class DyImageDataBase: RoomDatabase() {
 
@@ -19,7 +19,7 @@ abstract class DyImageDataBase: RoomDatabase() {
 
 val dyImageDb: DyImageDataBase by lazy {
     Room.databaseBuilder(appCtx, DyImageDataBase::class.java, "dy_image.db")
-        .fallbackToDestructiveMigration()
+        .fallbackToDestructiveMigration(false)
         .build()
 }
 

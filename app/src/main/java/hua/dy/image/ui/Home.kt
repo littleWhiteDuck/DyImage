@@ -45,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -56,13 +57,11 @@ import coil.compose.AsyncImage
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
-import coil.transform.RoundedCornersTransformation
-import hua.dy.image.SharedDialog
 import hua.dy.image.bean.ImageBean
-import hua.dy.image.bean.isGif
+import hua.dy.image.shareOtherApp
+import hua.dy.image.ui.components.ShareDialog
+import hua.dy.image.ui.components.SortBottomDialog
 import hua.dy.image.utils.GetDyPermission
-import hua.dy.image.utils.SortBottomDialog
-import hua.dy.image.utils.dp2Px
 import hua.dy.image.utils.screenHeightPx
 import hua.dy.image.utils.sortValue
 import hua.dy.image.viewmodel.DyImageViewModel
@@ -72,10 +71,6 @@ import splitties.init.appCtx
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Home() {
-
-    val sortImageState = remember {
-        mutableStateOf(Pair(false, -1))
-    }
 
     val context = LocalContext.current
 
@@ -117,6 +112,9 @@ fun Home() {
 
     val chatMainState = viewModel.chatImageStateFlow.collectAsState()
 
+    var showSortSheetState by remember { mutableStateOf(false) }
+
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize(),
@@ -145,7 +143,7 @@ fun Home() {
                         modifier = Modifier
                             .padding(end = 16.dp)
                             .clickable {
-                                sortImageState.value = Pair(true, sortValue)
+                                showSortSheetState = true
                             }
                     )
                 }
@@ -167,7 +165,10 @@ fun Home() {
                         imageData.refresh()
                     }
                 ) {
-                    Text(text = typeStringState.value, color = MaterialTheme.colorScheme.surfaceTint)
+                    Text(
+                        text = typeStringState.value,
+                        color = MaterialTheme.colorScheme.surfaceTint
+                    )
                 }
                 AnimatedVisibility(visible = lazyScrollState.canScrollBackward) {
                     Icon(
@@ -258,7 +259,7 @@ fun Home() {
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier
-                .padding(paddingValues),
+                .padding(top = paddingValues.calculateTopPadding()),
             contentPadding = PaddingValues(
                 bottom = 100.dp
             ),
@@ -269,47 +270,47 @@ fun Home() {
                 AsyncImage(
                     model = ImageRequest.Builder(appCtx)
                         .data(item?.imagePath)
-                        .apply {
-                            if (item?.isGif == false)
-                                transformations(RoundedCornersTransformation(16.dp.value.dp2Px))
-                        }
                         .build(),
-                    imageLoader = item?.imageLoader ?: globalImageLoader,
+                    imageLoader = gifImageLoader,
                     modifier = Modifier
                         .padding(8.dp)
                         .aspectRatio(1f)
-                        .pointerInput(index, item?.md5) {
-                            detectTapGestures(
-                                onLongPress = {
-                                    dialogState.value = Pair(true, item)
-                                }
-                            )
-                        },
+                        .clip(shape = RoundedCornerShape(16.dp))
+                        .clickable(onClick = {
+                            dialogState.value = Pair(true, item)
+                        }),
                     contentScale = ContentScale.Crop,
                     contentDescription = null
                 )
             }
         }
         if (dialogState.value.first && dialogState.value.second != null) {
-            SharedDialog(dialogState = dialogState)
+            ShareDialog(imageBean = dialogState.value.second!!, onDismiss = {
+                dialogState.value = Pair(false, null)
+            }, onShareClick = { path ->
+                context.shareOtherApp(imagePath = path)
+            })
         }
 
     }
-
-    AnimatedVisibility(visible = sortImageState.value.first) {
+    if (showSortSheetState) {
         SortBottomDialog(
-            sortImageState,
+            sortValue,
             onclick = {
+                showSortSheetState = false
                 sortValue = it
                 imageData.refresh()
+            },
+            onDismiss = {
+                showSortSheetState = false
             }
         )
     }
 
     if (!permissionState) {
-        GetDyPermission(viewModel.needShizuku) { isGanted, isShizuku ->
+        GetDyPermission(viewModel.needShizuku) { isGranted, isShizuku ->
             if (isShizuku) {
-                if (isGanted) {
+                if (isGranted) {
                     viewModel.bindService()
                 } else {
                     viewModel.needShizuku = false
@@ -321,14 +322,6 @@ fun Home() {
 
 }
 
-
-val ImageBean?.imageLoader: ImageLoader
-    get() {
-        return if (this?.isGif == true) gifImageLoader else globalImageLoader
-    }
-
-val globalImageLoader = ImageLoader.Builder(appCtx)
-    .build()
 
 val gifImageLoader = ImageLoader.Builder(appCtx)
     .components {

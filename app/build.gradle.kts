@@ -1,22 +1,34 @@
-@Suppress("DSL_SCOPE_VIOLATION") // TODO: Remove once KTIJ-19369 is fixed
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.kotlinKsp)
+    alias(libs.plugins.compose.compiler)
 }
 apply(plugin = "org.jetbrains.kotlin.plugin.parcelize")
 
+val configFile = rootProject.file("sign.properties")
+val prop = Properties()
+prop.load(FileInputStream(configFile))
+
 android {
     namespace = "hua.dy.image"
-    compileSdk = 34
+    compileSdk = 36
+    ndkVersion = "29.0.14033849"
 
     defaultConfig {
-        applicationId = "hua.dy.image"
+        applicationId = "hua.dy.image2"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 6
-        versionName = "0.4"
+        versionName = "0.6"
 
+        androidResources.localeFilters += setOf("zh")
+
+        //noinspection WrongGradleMethod
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
         }
@@ -25,12 +37,36 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        signingConfigs {
+            create("keyStore") {
+                keyAlias = prop.getProperty("alias")
+                keyPassword = prop.getProperty("keyPassword")
+                storeFile = File(prop.getProperty("file"))
+                storePassword = prop.getProperty("password")
+                enableV3Signing = true
+            }
+        }
+
+        ndk {
+            abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+
+        }
     }
 
     buildTypes {
+        val signConfig = signingConfigs.getByName("keyStore")
+
         release {
+            signingConfig = signConfig
             isMinifyEnabled = true
-            isShrinkResources =  true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -41,20 +77,29 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+
+    kotlin.compilerOptions.jvmTarget = JvmTarget.JVM_17
+
     buildFeatures {
         compose = true
         buildConfig = true
         aidl = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.7"
-    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += setOf(
+                "okhttp3/**",
+                "kotlin/**",
+                "org/**",
+                "**/*.properties",
+                "**.bin",
+                "**.json",
+                "**VERSION",
+                "META-INF/*.version",
+                "**/LICENSE.txt",
+            )
         }
     }
 }
@@ -69,6 +114,7 @@ dependencies {
     implementation(libs.ui.graphics)
     implementation(libs.ui.tooling.preview)
     implementation(libs.material3)
+    implementation(libs.androidx.material.icons.extended.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
@@ -92,7 +138,7 @@ dependencies {
     implementation(libs.paging.runtime)
 
     implementation(libs.shared.preference)
-    implementation(libs.system.ui.controll)
+//    implementation(libs.system.ui.controll)
 
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

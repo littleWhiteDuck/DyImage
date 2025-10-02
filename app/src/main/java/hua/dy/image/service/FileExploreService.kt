@@ -4,7 +4,8 @@ import android.os.RemoteException
 import android.util.Log
 import hua.dy.image.bean.FileBean
 import hua.dy.image.bean.ImageBean
-import hua.dy.image.bean.type
+import hua.dy.image.utils.FileType
+import hua.dy.image.utils.FileTypeChecker
 import java.io.BufferedInputStream
 import java.io.File
 import java.math.BigInteger
@@ -36,7 +37,8 @@ class FileExplorerService : IFileExplorerService.Stub() {
         if ((bean.length ?: 0L) < fileSize) throw Exception("File is so big")
         val md5 = bean.md5
         val endType = bean.imageType
-        val fileNameWithType = "${bean.generalFileName()}.${endType ?: "png"}"
+        val fileNameWithType =
+            "${bean.generalFileName()}.${endType.takeIf { it != FileType.UNKNOWN }?.displayName ?: FileType.PNG.displayName}"
         val generalFilePath = File(saveImagePath, fileNameWithType)
         generalFilePath.outputStream().use { fos ->
             File(bean.path!!).inputStream().use { ins ->
@@ -48,7 +50,7 @@ class FileExplorerService : IFileExplorerService.Stub() {
             imagePath = generalFilePath.toString(),
             fileLength = bean.length ?: 0L,
             fileTime = bean.lastModified ?: 0L,
-            fileType = endType.type,
+            fileType = endType,
             fileName = fileNameWithType,
             secondMenu = providerSecond ?: "",
             scanTime = System.currentTimeMillis(),
@@ -75,23 +77,14 @@ class FileExplorerService : IFileExplorerService.Stub() {
             return BigInteger(1, md5.digest()).toString(16).padStart(32, '0')
         }
 
-    val FileBean.imageType: String?
+    val FileBean.imageType: FileType
         get() {
             val ins = File(path!!).inputStream()
-            val byteArray = ByteArray(10)
+            val byteArray = ByteArray(12) // webp 12
             ins.read(byteArray)
-            if (byteArray[0] == 'G'.code.toByte() && byteArray[1] == 'I'.code.toByte() && byteArray[2] == 'F'.code.toByte()) {
-                return "gif"
-            }
-            if (byteArray[1] == 'P'.code.toByte() && byteArray[2] == 'N'.code.toByte() && byteArray[3] == 'G'.code.toByte()) {
-                return "png"
-            }
-            if (byteArray[6] == 'J'.code.toByte() && byteArray[7] == 'F'.code.toByte() && byteArray[8] == 'I'.code.toByte() && byteArray[9] == 'F'.code.toByte()) {
-                return "jpg"
-            }
-            Log.e("FileType2", byteArray.map { it.toInt().toChar() }.joinToString("."))
             ins.close()
-            return null
+            Log.e("FileType2", byteArray.map { it.toInt().toChar() }.joinToString("."))
+            return FileTypeChecker.getType(byteArray)
         }
 
     fun FileBean.generalFileName(): String {

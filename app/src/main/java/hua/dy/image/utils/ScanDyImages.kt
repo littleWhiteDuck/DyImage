@@ -8,7 +8,6 @@ import androidx.documentfile.provider.DocumentFile
 import hua.dy.image.app.AppBean
 import hua.dy.image.app.DyAppBean
 import hua.dy.image.bean.ImageBean
-import hua.dy.image.bean.type
 import hua.dy.image.db.dyImageDao
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -54,15 +53,15 @@ fun scanDyImages(
 }
 
 private fun DocumentFile.getRealScopeCount(): Pair<Int, Int> {
-        val fileSum = listFiles().size
-        val interval = fileSum.toFloat() / scopeCount
-        val scopeCount =  if (fileSize.toFloat() % scopeCount == 0f) {
-            scopeCount
-        } else {
-            if (interval < 1 && interval > 0) 1 else if (interval <= 0) 0 else scopeCount + 1
-        }
-        return Pair(scopeCount, if (interval < 1) fileSum else interval.toInt())
+    val fileSum = listFiles().size
+    val interval = fileSum.toFloat() / scopeCount
+    val scopeCount = if (fileSize.toFloat() % scopeCount == 0f) {
+        scopeCount
+    } else {
+        if (interval < 1 && interval > 0) 1 else if (interval <= 0) 0 else scopeCount + 1
     }
+    return Pair(scopeCount, if (interval < 1) fileSum else interval.toInt())
+}
 
 private fun DocumentFile.saveFile(
     cacheIndex: Int,
@@ -102,7 +101,8 @@ private suspend fun DocumentFile.saveImage(
             val count = dyImageDao.selectMd5Exist(md5)
             if (count > 0) return
             val endType = imageType
-            val fileNameWithType = "${this.generalFileName()}.${endType ?: "png"}"
+            val fileNameWithType =
+                "${this.generalFileName()}.${endType.takeIf { it != FileType.UNKNOWN }?.displayName ?: FileType.PNG.displayName}"
             val newFile = FileProvider.getUriForFile(
                 appCtx,
                 SHARED_PROVIDER,
@@ -118,7 +118,7 @@ private suspend fun DocumentFile.saveImage(
                 imagePath = newFile.toString(),
                 fileLength = this.length(),
                 fileTime = this.lastModified(),
-                fileType = endType.type,
+                fileType = endType,
                 fileName = fileNameWithType,
                 secondMenu = appBean.providerSecond,
                 scanTime = System.currentTimeMillis(),
@@ -139,23 +139,14 @@ private val DocumentFile.md5: String
         return BigInteger(1, md5.digest()).toString(16).padStart(32, '0')
     }
 
-val DocumentFile.imageType: String?
+val DocumentFile.imageType: FileType
     get() {
-        val ins = appCtx.contentResolver.openInputStream(uri) ?: return null
-        val byteArray = ByteArray(10)
+        val ins = appCtx.contentResolver.openInputStream(uri) ?: return FileType.UNKNOWN
+        val byteArray = ByteArray(12) // webp 12
         ins.read(byteArray)
-        if (byteArray[0] == 'G'.code.toByte() && byteArray[1] == 'I'.code.toByte() && byteArray[2] == 'F'.code.toByte()) {
-            return "gif"
-        }
-        if (byteArray[1] == 'P'.code.toByte() && byteArray[2] == 'N'.code.toByte() && byteArray[3] == 'G'.code.toByte()) {
-            return "png"
-        }
-        if (byteArray[6] == 'J'.code.toByte() && byteArray[7] == 'F'.code.toByte() && byteArray[8] == 'I'.code.toByte() && byteArray[9] == 'F'.code.toByte()) {
-            return "jpg"
-        }
-        Log.e("FileType", byteArray.map { it.toInt().toChar() }.joinToString("."))
         ins.close()
-        return null
+        Log.e("FileType", byteArray.map { it.toInt().toChar() }.joinToString("."))
+        return FileTypeChecker.getType(byteArray)
     }
 
 /**

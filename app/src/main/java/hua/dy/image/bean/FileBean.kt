@@ -3,10 +3,6 @@ package hua.dy.image.bean
 import android.os.Parcel
 import android.os.Parcelable
 import hua.dy.image.service.FileExplorerService
-import kotlinx.parcelize.Parcelize
-import rikka.shizuku.Shizuku
-import rikka.shizuku.ShizukuProvider
-import java.io.File
 
 data class FileBean(
     val name: String?,

@@ -93,7 +93,7 @@ fun hasDyPermission(packageName: String): Boolean {
 }
 
 
-const val SHARED_PROVIDER = "hua.dy.image.provider"
+const val SHARED_PROVIDER = "hua.dy.image.provider2"
 
 const val APP_SHARED_PROVIDER_TOP_PATH = "image_share"
 

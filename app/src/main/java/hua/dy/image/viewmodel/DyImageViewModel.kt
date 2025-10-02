@@ -11,15 +11,12 @@ import androidx.paging.PagingSource
 import androidx.paging.cachedIn
 import androidx.paging.filter
 import hua.dy.image.app.DyAppBean
-import hua.dy.image.bean.GIF
 import hua.dy.image.bean.ImageBean
-import hua.dy.image.bean.JPG
-import hua.dy.image.bean.Other
-import hua.dy.image.bean.PNG
 import hua.dy.image.db.dyImageDao
 import hua.dy.image.service.FileExplorerService
 import hua.dy.image.utils.APP_SHARED_PROVIDER_TOP_PATH
 import hua.dy.image.utils.FileExplorerServiceManager
+import hua.dy.image.utils.FileType
 import hua.dy.image.utils.ShizukuUtils
 import hua.dy.image.utils.hasDyPermission
 import hua.dy.image.utils.scanDyImages
@@ -34,9 +31,7 @@ import kotlinx.coroutines.launch
 import splitties.init.appCtx
 import java.io.File
 
-class DyImageViewModel: ViewModel() {
-
-
+class DyImageViewModel : ViewModel() {
 
     val allImages: Flow<PagingData<ImageBean>> =
         Pager(
@@ -64,46 +59,24 @@ class DyImageViewModel: ViewModel() {
         }
     }
 
-    private var type = -1
+    private var type = FileType.PNG
 
     fun changeType() {
-        type = when (type) {
-            -1 -> PNG
-            PNG, JPG -> type + 1
-            GIF -> Other
-            else -> -1
-        }
+        val index = FileType.entries.indexOf(type)
+        type = FileType.entries[(index + 1) % FileType.entries.size]
         viewModelScope.launch {
-            _typeState.emit(getTypeString())
+            _typeState.emit(type.displayName)
         }
     }
 
-    private fun getTypeString(): String {
-        return when (type) {
-            PNG -> "PNG"
-            JPG -> "JPG"
-            GIF -> "GIF"
-            Other -> "Other"
-            else -> "All"
-        }
-    }
-
-    private val _typeState = MutableStateFlow(getTypeString())
+    private val _typeState = MutableStateFlow(type.displayName)
     val typeState = _typeState.asStateFlow()
 
     private fun getImagePagingSource(): PagingSource<Int, ImageBean> {
-        return if (type == -1) {
-            when (sortValue) {
-                1 -> dyImageDao.getImageListByScanTime()
-                2 -> dyImageDao.getImageListByFileLength()
-                else -> dyImageDao.getImageListByFileTime()
-            }
-        } else {
-            when (sortValue) {
-                1 -> dyImageDao.getImageListByScanTime(type)
-                2 -> dyImageDao.getImageListByFileLength(type)
-                else -> dyImageDao.getImageListByFileTime(type)
-            }
+        return when (sortValue) {
+            1 -> dyImageDao.getImageListByScanTime(type)
+            2 -> dyImageDao.getImageListByFileLength(type)
+            else -> dyImageDao.getImageListByFileTime(type)
         }
 
     }
@@ -130,7 +103,11 @@ class DyImageViewModel: ViewModel() {
             val fileSize = runCatching { directory.listFiles()?.size ?: 0 }.getOrNull() ?: 0
             if (roomSize == 0) return@launch
             if (!directory.exists() || fileSize == 0) {
-                Toast.makeText(appCtx, "图片文件被其他文件清理软件清楚, 正在清楚数据库", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    appCtx,
+                    "图片文件被其他文件清理软件清楚, 正在清楚数据库",
+                    Toast.LENGTH_SHORT
+                ).show()
                 dyImageDao.deleteAll()
             }
         }
@@ -139,8 +116,8 @@ class DyImageViewModel: ViewModel() {
     private fun startScan() {
         if (ShizukuUtils.isShizukuAvailable) {
             Log.e("TAG", "shizuku")
-                Log.e("TAG", "start Scan ${FileExplorerService.service}")
-                scanDyImagesWithShizuku()
+            Log.e("TAG", "start Scan ${FileExplorerService.service}")
+            scanDyImagesWithShizuku()
         } else {
             Log.e("TAG", "saf")
             scanDyImages()

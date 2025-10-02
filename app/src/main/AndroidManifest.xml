@@ -27,7 +27,7 @@
             </intent-filter>
         </activity>
         <provider
-            android:authorities="hua.dy.image.provider"
+            android:authorities="hua.dy.image.provider2"
             android:name="androidx.core.content.FileProvider"
             android:exported="false"
             android:grantUriPermissions="true">
