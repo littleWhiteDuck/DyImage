@@ -9,6 +9,7 @@ lifecycle-runtime-ktx = "2.9.4"
 activity-compose = "1.11.0"
 compose-bom = "2025.09.01"
 document-util = "1.1.0"
+smart-exception-java = "0.2.1"
 splitties-appctx = "3.0.0"
 room-ktx = "2.8.1"
 coil = "2.7.0"
@@ -30,6 +31,7 @@ lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtim
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 compose-paging = { group = "androidx.paging", name = "paging-compose", version.ref = "paging-version" }
+smart-exception-java = { module = "com.arthenica:smart-exception-java", version.ref = "smart-exception-java" }
 splitties-appctx = { module = "com.louiscad.splitties:splitties-appctx", version.ref = "splitties-appctx" }
 ui = { group = "androidx.compose.ui", name = "ui" }
 paging-runtime = { group = "androidx.paging", name = "paging-runtime-ktx", version.ref = "paging-version"}
@@ -49,7 +51,7 @@ coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 shared-preference = { group = "androidx.preference", name = "preference-ktx", version.ref = "shared-preference" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "nav-version" }
 #fast-md5 = { group = "com.joyent.util", name = "fast-md5", version.ref = "fast-md5"}
-system-ui-controll = { group = "com.google.accompanist", name = "accompanist-systemuicontroller", version.ref = "accompanist" }
+#system-ui-controll = { group = "com.google.accompanist", name = "accompanist-systemuicontroller", version.ref = "accompanist" }
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 androidx-material-icons-extended-android = { group = "androidx.compose.material", name = "material-icons-extended-android", version.ref = "material-icons-extended-android" }

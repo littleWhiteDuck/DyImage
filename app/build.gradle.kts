@@ -14,6 +14,9 @@ val configFile = rootProject.file("sign.properties")
 val prop = Properties()
 prop.load(FileInputStream(configFile))
 
+val verCode = 7
+val verName = "0.7"
+
 android {
     namespace = "hua.dy.image"
     compileSdk = 36
@@ -23,8 +26,8 @@ android {
         applicationId = "hua.dy.image2"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = verCode
+        versionName = verName
 
         androidResources.localeFilters += setOf("zh")
 
@@ -48,9 +51,9 @@ android {
             }
         }
 
-        ndk {
+        /*ndk {
             abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
-        }
+        }*/
     }
 
     externalNativeBuild {
@@ -102,6 +105,25 @@ android {
             )
         }
     }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
+    androidComponents.onVariants { v ->
+        val variant = v as com.android.build.api.variant.impl.ApplicationVariantImpl
+        variant.outputs.forEach { output ->
+            val abiFilter =
+                output.filters.find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier
+                    ?: "universal"
+            output.outputFileName.set("DyImage-$verName($verCode)_${abiFilter}.apk")
+        }
+    }
+
 }
 
 dependencies {
@@ -142,5 +164,9 @@ dependencies {
 
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+
+    implementation(files("libs/ffmpeg-kit-min.aar"))
+    implementation(libs.smart.exception.java)
+
 
 }

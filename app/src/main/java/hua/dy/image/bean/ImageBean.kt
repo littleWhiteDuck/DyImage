@@ -8,14 +8,9 @@ import androidx.room.PrimaryKey
 import hua.dy.image.utils.FileType
 
 
-val ImageBean.isAnimatedImage get() = isGif || isWebp
 val ImageBean.isGif get() = fileType == FileType.GIF
-
 val ImageBean.isWebp get() = fileType == FileType.WEBP
-
-val ImageBean.isPng get() = fileType == FileType.PNG
-
-val ImageBean.isJpg get() = fileType == FileType.JPEG
+val ImageBean.isHeic get() = fileType == FileType.HEIC
 
 
 @Entity("dy_image")
