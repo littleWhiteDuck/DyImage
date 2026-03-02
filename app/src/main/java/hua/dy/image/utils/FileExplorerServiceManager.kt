@@ -15,11 +15,14 @@ import splitties.init.appCtx
 
 object FileExplorerServiceManager {
     private const val TAG = "FileExplorerServiceManager"
+    // Bump this value when service-side scan or decode logic changes,
+    // so Shizuku restarts user service with latest implementation.
+    private const val USER_SERVICE_VERSION = 2
     private var isBind = false
     private val USER_SERVICE_ARGS = UserServiceArgs(
         ComponentName(appCtx.packageName, FileExplorerService::class.java.getName())
     ).daemon(false).debuggable(BuildConfig.DEBUG).processNameSuffix("file_explorer_service")
-        .version(1)
+        .version(USER_SERVICE_VERSION)
     private val SERVICE_CONNECTION: ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
             Log.d(TAG, "onServiceConnected: ")

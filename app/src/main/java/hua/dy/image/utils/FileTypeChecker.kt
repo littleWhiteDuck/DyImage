@@ -56,11 +56,18 @@ object FileTypeChecker {
             .contentEquals("ftyp".toByteArray())
     }
 
+    fun isVvic(fileBytes: ByteArray): Boolean {
+        return fileBytes.size >= 12 &&
+            fileBytes.sliceArray(4 until 8).contentEquals("ftyp".toByteArray()) &&
+            fileBytes.sliceArray(8 until 12).contentEquals("vvic".toByteArray())
+    }
+
     fun getType(fileBytes: ByteArray): FileType {
         if (isJpeg(fileBytes)) return FileType.JPEG
         if (isPng(fileBytes)) return FileType.PNG
         if (isGif(fileBytes)) return FileType.GIF
         if (isWebp(fileBytes)) return FileType.WEBP
+        if (isVvic(fileBytes)) return FileType.VVIC
         if (isHeic(fileBytes)) return FileType.HEIC
         return FileType.UNKNOWN
     }
@@ -73,5 +80,6 @@ enum class FileType(val displayName: String) {
     WEBP(displayName = "webp"),
 
     HEIC(displayName = "heic"),
+    VVIC(displayName = "vvic"),
     UNKNOWN(displayName = "other")
 }

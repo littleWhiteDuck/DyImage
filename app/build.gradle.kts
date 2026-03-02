@@ -120,7 +120,7 @@ android {
             val abiFilter =
                 output.filters.find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier
                     ?: "universal"
-            output.outputFileName.set("DyImage-$verName($verCode)_${abiFilter}.apk")
+            output.outputFileName.set("EImage-$verName($verCode)_${abiFilter}.apk")
         }
     }
 
@@ -160,6 +160,7 @@ dependencies {
     implementation(libs.paging.runtime)
 
     implementation(libs.shared.preference)
+    implementation(libs.androidx.datastore.preferences)
 //    implementation(libs.system.ui.controll)
 
     implementation(libs.shizuku.api)

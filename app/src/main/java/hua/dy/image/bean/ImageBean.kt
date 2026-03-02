@@ -11,6 +11,7 @@ import hua.dy.image.utils.FileType
 val ImageBean.isGif get() = fileType == FileType.GIF
 val ImageBean.isWebp get() = fileType == FileType.WEBP
 val ImageBean.isHeic get() = fileType == FileType.HEIC
+val ImageBean.isVvic get() = fileType == FileType.VVIC
 
 
 @Entity("dy_image")

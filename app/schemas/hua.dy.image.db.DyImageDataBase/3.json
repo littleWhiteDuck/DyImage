@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "2e8a0a84e702a170c5313cc2fb37807f",
+    "identityHash": "dcdada7ebd0e25fc8b8c10dc47b2ec52",
     "entities": [
       {
         "tableName": "dy_image",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`md5` TEXT NOT NULL, `image_path` TEXT NOT NULL, `file_length` INTEGER NOT NULL DEFAULT 0, `file_time` INTEGER NOT NULL, `file_type` INTEGER NOT NULL, `file_name` TEXT NOT NULL DEFAULT '', `second_menu` TEXT NOT NULL DEFAULT '', `scan_time` INTEGER NOT NULL DEFAULT 0, `cache_path` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`md5`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`md5` TEXT NOT NULL, `image_path` TEXT NOT NULL, `file_length` INTEGER NOT NULL DEFAULT 0, `file_time` INTEGER NOT NULL, `file_type` TEXT NOT NULL, `file_name` TEXT NOT NULL DEFAULT '', `second_menu` TEXT NOT NULL DEFAULT '', `scan_time` INTEGER NOT NULL DEFAULT 0, `cache_path` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`md5`))",
         "fields": [
           {
             "fieldPath": "md5",
@@ -36,7 +36,7 @@
           {
             "fieldPath": "fileType",
             "columnName": "file_type",
-            "affinity": "INTEGER",
+            "affinity": "TEXT",
             "notNull": true
           },
           {
@@ -73,15 +73,119 @@
           "columnNames": [
             "md5"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
+      },
+      {
+        "tableName": "scan_path",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `scheme_id` INTEGER NOT NULL DEFAULT 1, `relative_path` TEXT NOT NULL, `note` TEXT NOT NULL, `is_enabled` INTEGER NOT NULL DEFAULT 1, `order_index` INTEGER NOT NULL DEFAULT 0, `created_at` INTEGER NOT NULL DEFAULT 0)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "schemeId",
+            "columnName": "scheme_id",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relative_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isEnabled",
+            "columnName": "is_enabled",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "orderIndex",
+            "columnName": "order_index",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "scan_scheme",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `package_name` TEXT NOT NULL, `root_path` TEXT NOT NULL, `save_folder` TEXT NOT NULL, `created_at` INTEGER NOT NULL DEFAULT 0)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "packageName",
+            "columnName": "package_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rootPath",
+            "columnName": "root_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveFolder",
+            "columnName": "save_folder",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
       }
     ],
-    "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2e8a0a84e702a170c5313cc2fb37807f')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'dcdada7ebd0e25fc8b8c10dc47b2ec52')"
     ]
   }
 }

@@ -1,15 +1,16 @@
 package hua.dy.image.service
 
 import android.os.RemoteException
-import android.util.Log
 import hua.dy.image.bean.FileBean
 import hua.dy.image.bean.ImageBean
 import hua.dy.image.utils.FileType
 import hua.dy.image.utils.FileTypeChecker
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.InputStream
 import java.math.BigInteger
 import java.security.MessageDigest
+import kotlin.math.min
 
 class FileExplorerService : IFileExplorerService.Stub() {
     @Throws(RemoteException::class)
@@ -34,15 +35,19 @@ class FileExplorerService : IFileExplorerService.Stub() {
         cachePath: List<String>?
     ): ImageBean {
         if (bean == null) throw NullPointerException("Bean is Empty")
-        if ((bean.length ?: 0L) < fileSize) throw Exception("File is so big")
-        val md5 = bean.md5
-        val endType = bean.imageType
+        if ((bean.length ?: 0L) < fileSize) throw Exception("File is too small")
+        val sourceFile = File(bean.path ?: throw NullPointerException("Bean path is Empty"))
+        val (md5, endType) = sourceFile.inputStream().use { input ->
+            input.fingerprint()
+        }
         val fileNameWithType =
-            "${bean.generalFileName()}.${endType.takeIf { it != FileType.UNKNOWN }?.displayName ?: FileType.PNG.displayName}"
+            "${md5}.${endType.takeIf { it != FileType.UNKNOWN }?.displayName ?: FileType.PNG.displayName}"
         val generalFilePath = File(saveImagePath, fileNameWithType)
-        generalFilePath.outputStream().use { fos ->
-            File(bean.path!!).inputStream().use { ins ->
-                ins.copyTo(fos)
+        if (!generalFilePath.exists()) {
+            generalFilePath.outputStream().use { fos ->
+                sourceFile.inputStream().use { ins ->
+                    ins.copyTo(fos)
+                }
             }
         }
         return ImageBean(
@@ -68,24 +73,26 @@ class FileExplorerService : IFileExplorerService.Stub() {
         )
     }
 
-    private val FileBean.md5: String
-        get() {
-            val md5 = MessageDigest.getInstance("MD5")
-            BufferedInputStream(File(path!!).inputStream(), 1024).use {
-                md5.update(it.readBytes())
+    private fun InputStream.fingerprint(): Pair<String, FileType> {
+        val md5 = MessageDigest.getInstance("MD5")
+        val header = ByteArray(12)
+        var headerOffset = 0
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        val bis = BufferedInputStream(this, 8 * 1024)
+        while (true) {
+            val read = bis.read(buffer)
+            if (read <= 0) break
+            md5.update(buffer, 0, read)
+            if (headerOffset < header.size) {
+                val copySize = min(header.size - headerOffset, read)
+                System.arraycopy(buffer, 0, header, headerOffset, copySize)
+                headerOffset += copySize
             }
-            return BigInteger(1, md5.digest()).toString(16).padStart(32, '0')
         }
-
-    val FileBean.imageType: FileType
-        get() {
-            val ins = File(path!!).inputStream()
-            val byteArray = ByteArray(12) // webp 12
-            ins.read(byteArray)
-            ins.close()
-            Log.e("FileType2", byteArray.map { it.toInt().toChar() }.joinToString("."))
-            return FileTypeChecker.getType(byteArray)
-        }
+        val md5Text = BigInteger(1, md5.digest()).toString(16).padStart(32, '0')
+        val type = FileTypeChecker.getType(header.copyOf(headerOffset))
+        return md5Text to type
+    }
 
     fun FileBean.generalFileName(): String {
 //    val subNameResult = runCatching {
