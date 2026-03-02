@@ -22,13 +22,14 @@ const val ANDROID_SAF_PATH =
 @Composable
 fun GetDyPermission(
     needShizuku: Boolean,
-    packageName: String,
+    rootPath: String,
+    permissionKey: String,
     callBack: (isGranted: Boolean, isShizuku: Boolean) -> Unit
 ) {
     if (ShizukuUtils.isShizukuAvailable && needShizuku) {
         GetShizukuPermission(callBack)
     } else {
-        GetSafPermission(packageName, callBack)
+        GetSafPermission(rootPath, permissionKey, callBack)
     }
 }
 
@@ -59,17 +60,19 @@ private fun GetShizukuPermission(
 
 @Composable
 private fun GetSafPermission(
-    packageName: String,
+    rootPath: String,
+    permissionKey: String,
     callBack: (isGranted: Boolean, isShizuku: Boolean) -> Unit
 ) {
-    var packageShared by SharedPreferenceEntrust(packageName, "")
+    var savedPermissionUri by SharedPreferenceEntrust(permissionKey, "")
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) {
             Toast.makeText(appCtx, "未授予目录权限", Toast.LENGTH_SHORT).show()
             callBack.invoke(false, false)
             return@rememberLauncherForActivityResult
         }
-        if (!uri.toString().endsWith(packageName)) {
+        val expectedPackage = extractAndroidDataPackage(rootPath)
+        if (expectedPackage.isNotBlank() && !uri.toString().endsWith(expectedPackage)) {
             Toast.makeText(appCtx, "目录不正确，请选择目标应用目录", Toast.LENGTH_SHORT).show()
             callBack.invoke(false, false)
             return@rememberLauncherForActivityResult
@@ -78,24 +81,37 @@ private fun GetSafPermission(
         val modeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         appCtx.contentResolver.takePersistableUriPermission(uri, modeFlags)
-        packageShared = uri.toString()
+        savedPermissionUri = uri.toString()
         callBack.invoke(true, false)
     }
 
-    LaunchedEffect(Unit) {
-        if (packageShared.isBlank() || !hasDyPermission(packageName)) {
-            launcher.launch(Uri.parse("$ANDROID_SAF_PATH$packageName"))
+    LaunchedEffect(rootPath, permissionKey) {
+        if (savedPermissionUri.isBlank() || !hasDyPermission(savedPermissionUri)) {
+            launcher.launch(buildSafInitialUri(rootPath))
         } else {
             callBack.invoke(true, false)
         }
     }
 }
 
-fun hasDyPermission(packageName: String): Boolean {
-    val permissionUris = appCtx.contentResolver.persistedUriPermissions.map {
-        it.uri.toString().split("data%2F", ignoreCase = true).last()
+fun hasDyPermission(permissionUri: String): Boolean {
+    if (permissionUri.isBlank()) return false
+    return appCtx.contentResolver.persistedUriPermissions.any { permission ->
+        permission.isReadPermission && permission.uri.toString() == permissionUri
     }
-    return permissionUris.indexOf(packageName) != -1
+}
+
+private fun extractAndroidDataPackage(rootPath: String): String {
+    val normalizedPath = rootPath.trim().replace("\\", "/").trimEnd('/')
+    val prefix = "/sdcard/Android/data/"
+    if (!normalizedPath.startsWith(prefix)) return ""
+    return normalizedPath.removePrefix(prefix).substringBefore("/")
+}
+
+private fun buildSafInitialUri(rootPath: String): Uri? {
+    val expectedPackage = extractAndroidDataPackage(rootPath)
+    if (expectedPackage.isBlank()) return null
+    return Uri.parse("$ANDROID_SAF_PATH$expectedPackage")
 }
 
 const val SHARED_PROVIDER = "hua.dy.image.provider2"

@@ -298,7 +298,7 @@ class GalleryViewModel : ViewModel() {
             return if (useShizuku) {
                 ShizukuUtils.isShizukuPermission
             } else {
-                ImageRepository.isSafPermissionGranted(scheme.packageName)
+                ImageRepository.isSafPermissionGranted(scheme)
             }
         }
 

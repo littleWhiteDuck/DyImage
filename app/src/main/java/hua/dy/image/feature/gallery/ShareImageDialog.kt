@@ -1,5 +1,6 @@
 package hua.dy.image.feature.gallery
 
+import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,8 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -69,7 +70,7 @@ fun ShareImageDialog(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusIsError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val sourceFile = remember(currentPath) { File(currentPath) }
@@ -213,7 +214,11 @@ fun ShareImageDialog(
                 OutlinedButton(
                     enabled = !isWorking,
                     onClick = {
-                        clipboardManager.setText(AnnotatedString(parentPath))
+                        scope.launch {
+                            clipboard.setClipEntry(
+                                ClipData.newPlainText("path", parentPath).toClipEntry()
+                            )
+                        }
                         statusMessage = "已复制文件所在路径"
                         statusIsError = false
                     },

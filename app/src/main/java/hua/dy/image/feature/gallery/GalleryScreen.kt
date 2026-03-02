@@ -8,8 +8,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -53,11 +52,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -99,6 +98,7 @@ import hua.dy.image.ui.components.SortBottomDialog
 import hua.dy.image.utils.FileType
 import hua.dy.image.utils.GetDyPermission
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -143,10 +143,11 @@ fun GalleryScreen(
     var showFilterMenu by remember { mutableStateOf(false) }
     var dialogImage by remember { mutableStateOf<Pair<String, FileType>?>(null) }
     var selectionMode by remember { mutableStateOf(false) }
-    var batchWorking by remember { mutableStateOf(false) }
+    var batchJob by remember { mutableStateOf<Job?>(null) }
     val selectedItems = remember { mutableStateMapOf<String, MultiSelectedImage>() }
     val convertedGifByMd5 = remember { mutableStateMapOf<String, String>() }
     val failedConvertByMd5 = remember { mutableStateMapOf<String, Boolean>() }
+    val batchWorking = batchJob?.isActive == true
 
     val selectedCount = selectedItems.size
     val convertibleCount = selectedItems.values.count { item ->
@@ -154,13 +155,28 @@ fun GalleryScreen(
     }
     val convertedCount = selectedItems.keys.count { convertedGifByMd5.containsKey(it) }
     val failedCount = selectedItems.keys.count { failedConvertByMd5.containsKey(it) }
+    val openFilterMenu = { showFilterMenu = true }
+    val closeFilterMenu = { showFilterMenu = false }
+    val openSortDialog = { showSortDialog = true }
+    val closeSortDialog = { showSortDialog = false }
+    val closeImageDialog = { dialogImage = null }
 
     fun clearSelectionState() {
         selectionMode = false
-        batchWorking = false
+        batchJob?.cancel()
         selectedItems.clear()
         convertedGifByMd5.clear()
         failedConvertByMd5.clear()
+    }
+
+    fun launchBatchWork(block: suspend () -> Unit) {
+        if (batchWorking || selectedCount <= 0) return
+        batchJob = scope.launch {
+            try {
+                block()
+            } finally {
+            }
+        }
     }
 
     fun toggleSelection(item: ImageBean) {
@@ -196,7 +212,7 @@ fun GalleryScreen(
         viewModel.refreshIfEmptyAndPermitted(permissionState)
     }
 
-    LaunchedEffect(activeScheme.packageName) {
+    LaunchedEffect(activeScheme.id, activeScheme.packageName, activeScheme.rootPath) {
         permissionState = viewModel.hasPermission
     }
 
@@ -270,7 +286,7 @@ fun GalleryScreen(
                         ) {
                             Box {
                                 FilledIconButton(
-                                    onClick = { showFilterMenu = true },
+                                    onClick = openFilterMenu,
                                     colors = IconButtonDefaults.filledIconButtonColors(
                                         containerColor = if (selectedFilter.isAll) {
                                             MaterialTheme.colorScheme.primaryContainer
@@ -296,7 +312,7 @@ fun GalleryScreen(
                                 }
                                 DropdownMenu(
                                     expanded = showFilterMenu,
-                                    onDismissRequest = { showFilterMenu = false }
+                                    onDismissRequest = closeFilterMenu
                                 ) {
                                     filterOptions.forEach { option ->
                                         DropdownMenuItem(
@@ -306,7 +322,7 @@ fun GalleryScreen(
                                             },
                                             onClick = {
                                                 viewModel.updatePathFilter(option)
-                                                showFilterMenu = false
+                                                closeFilterMenu()
                                             }
                                         )
                                     }
@@ -314,7 +330,7 @@ fun GalleryScreen(
                             }
 
                             FilledIconButton(
-                                onClick = { showSortDialog = true },
+                                onClick = openSortDialog,
                                 colors = IconButtonDefaults.filledIconButtonColors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -368,14 +384,12 @@ fun GalleryScreen(
                     failedCount = failedCount,
                     isWorking = batchWorking,
                     onConvert = {
-                        if (!batchWorking && selectedCount > 0) {
-                            scope.launch {
+                        launchBatchWork {
                                 val snapshot = selectedItems.values.toList()
                                 if (snapshot.none { isGifConvertible(it.imagePath, it.fileType) }) {
                                     snackBarHostState.showSnackbar("当前选择中没有可转换项（仅支持 WEBP/HEIC）")
-                                    return@launch
+                                    return@launchBatchWork
                                 }
-                                batchWorking = true
                                 val summary = withContext(Dispatchers.IO) {
                                     val successMap = mutableMapOf<String, String>()
                                     val failedIds = mutableSetOf<String>()
@@ -413,17 +427,13 @@ fun GalleryScreen(
                                         convertedGifByMd5.remove(md5)
                                     }
                                 }
-                                batchWorking = false
                                 snackBarHostState.showSnackbar(
                                     "转换完成：成功 ${summary.successMap.size}，失败 ${summary.failedIds.size}，跳过 ${summary.skipped}。失败项仍可保存/分享原图"
                                 )
-                            }
                         }
                     },
                     onSave = {
-                        if (!batchWorking && selectedCount > 0) {
-                            scope.launch {
-                                batchWorking = true
+                        launchBatchWork {
                                 val snapshot = selectedItems.values.toList()
                                 val convertedSnapshot = convertedGifByMd5.toMap()
                                 val result = withContext(Dispatchers.IO) {
@@ -435,15 +445,11 @@ fun GalleryScreen(
                                     }
                                     success to failed
                                 }
-                                batchWorking = false
                                 snackBarHostState.showSnackbar("保存完成：成功 ${result.first}，失败 ${result.second}")
-                            }
                         }
                     },
                     onShare = {
-                        if (!batchWorking && selectedCount > 0) {
-                            scope.launch {
-                                batchWorking = true
+                        launchBatchWork {
                                 val snapshot = selectedItems.values.toList()
                                 val convertedSnapshot = convertedGifByMd5.toMap()
                                 val sharePaths = withContext(Dispatchers.IO) {
@@ -454,14 +460,12 @@ fun GalleryScreen(
                                         if (file.exists()) file.absolutePath else null
                                     }.distinct()
                                 }
-                                batchWorking = false
                                 if (sharePaths.isEmpty()) {
                                     snackBarHostState.showSnackbar("没有可分享的文件")
                                 } else {
                                     context.shareOtherApp(sharePaths)
                                     snackBarHostState.showSnackbar("已发起分享 ${sharePaths.size} 项")
                                 }
-                            }
                         }
                     },
                     onClear = { clearSelectionState() }
@@ -625,9 +629,9 @@ fun GalleryScreen(
             sortValue = sortType,
             onclick = {
                 viewModel.updateSortType(it)
-                showSortDialog = false
+                closeSortDialog()
             },
-            onDismiss = { showSortDialog = false }
+            onDismiss = closeSortDialog
         )
     }
 
@@ -636,17 +640,18 @@ fun GalleryScreen(
             ShareImageDialog(
                 imagePath = path,
                 fileType = type,
-                onDismiss = { dialogImage = null },
+                onDismiss = closeImageDialog,
                 onShare = { sharePath -> context.shareOtherApp(sharePath) }
             )
         }
     }
 
     if (!permissionState) {
-        key(permissionRequestKey, activeScheme.packageName) {
+        key(permissionRequestKey, activeScheme.packageName, activeScheme.rootPath) {
             GetDyPermission(
                 needShizuku = viewModel.needShizuku,
-                packageName = activeScheme.packageName
+                rootPath = activeScheme.rootPath,
+                permissionKey = activeScheme.packageName
             ) { isGranted, isShizuku ->
                 if (isShizuku) {
                     if (isGranted) {

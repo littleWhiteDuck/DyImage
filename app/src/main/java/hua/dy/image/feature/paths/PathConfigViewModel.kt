@@ -82,26 +82,29 @@ class PathConfigViewModel : ViewModel() {
         }
     }
 
-    fun saveScheme(id: Long?, name: String, packageName: String) {
+    fun saveScheme(id: Long?, name: String, rootPath: String) {
         val schemeName = name.trim()
-        val packageValue = packageName.trim()
+        val normalizedRootPath = normalizeRootPath(rootPath)
         if (schemeName.isBlank()) {
             viewModelScope.launch { _messageFlow.emit("方案名称不能为空") }
             return
         }
-        if (!isValidPackageName(packageValue)) {
-            viewModelScope.launch { _messageFlow.emit("包名格式不正确") }
+        if (normalizedRootPath.isBlank() || !normalizedRootPath.startsWith("/")) {
+            viewModelScope.launch { _messageFlow.emit("主路径必须以 / 开头") }
             return
         }
         viewModelScope.launch {
-            val rootPath = "/sdcard/Android/data/$packageValue"
-            val folder = packageValue.replace('.', '_')
+            val editingScheme = id?.let { currentId ->
+                uiState.value.schemes.firstOrNull { it.id == currentId }
+            }
+            val permissionKey = buildPermissionKey(normalizedRootPath)
+            val folder = editingScheme?.saveFolder ?: buildSaveFolder(schemeName, normalizedRootPath)
             ImageRepository.upsertScheme(
                 ScanSchemeEntity(
                     id = id ?: 0L,
                     name = schemeName,
-                    packageName = packageValue,
-                    rootPath = rootPath,
+                    packageName = permissionKey,
+                    rootPath = normalizedRootPath,
                     saveFolder = folder
                 )
             )
@@ -111,14 +114,18 @@ class PathConfigViewModel : ViewModel() {
 
     fun deleteScheme(entity: ScanSchemeEntity) {
         viewModelScope.launch {
-            if (uiState.value.schemes.size <= 1) {
-                _messageFlow.emit("至少保留一个扫描方案")
+            ImageRepository.deleteScheme(entity)
+            val remainingSchemes = uiState.value.schemes.filterNot { it.id == entity.id }
+            if (remainingSchemes.isEmpty()) {
+                ImageRepository.ensureDefaultSchemeAndPaths()
+                val defaultSchemeId = ImageRepository.getSchemeById(DEFAULT_DOUYIN_SCHEME_ID)?.id
+                    ?: DEFAULT_DOUYIN_SCHEME_ID
+                AppSettingsStore.setActiveSchemeId(defaultSchemeId)
+                _messageFlow.emit("方案已删除，已自动补充抖音默认方案")
                 return@launch
             }
-            ImageRepository.deleteScheme(entity)
             if (uiState.value.activeSchemeId == entity.id) {
-                val fallback = uiState.value.schemes.firstOrNull { it.id != entity.id }?.id
-                if (fallback != null) AppSettingsStore.setActiveSchemeId(fallback)
+                AppSettingsStore.setActiveSchemeId(remainingSchemes.first().id)
             }
             _messageFlow.emit("方案已删除")
         }
@@ -175,15 +182,43 @@ class PathConfigViewModel : ViewModel() {
     }
 
     private fun normalizePath(path: String): String {
-        return path.trim().replace("\\\\", "/")
+        return path.trim().replace("\\", "/")
     }
 
-    private fun isValidPackageName(value: String): Boolean {
-        if (value.isBlank() || value.length < 3) return false
-        if (!value.contains('.')) return false
-        return value.split('.').all { part ->
-            part.isNotBlank() && (part.first().isLetter() || part.first() == '_') &&
-                part.all { it.isLetterOrDigit() || it == '_' }
+    private fun normalizeRootPath(path: String): String {
+        val normalized = normalizePath(path)
+        if (normalized == "/") return normalized
+        return normalized.trimEnd('/')
+    }
+
+    private fun buildPermissionKey(rootPath: String): String {
+        val androidDataPrefix = "/sdcard/Android/data/"
+        val androidMediaPrefix = "/sdcard/Android/media/"
+        val packageName = when {
+            rootPath.startsWith(androidDataPrefix) -> {
+                rootPath.removePrefix(androidDataPrefix).substringBefore("/")
+            }
+            rootPath.startsWith(androidMediaPrefix) -> {
+                rootPath.removePrefix(androidMediaPrefix).substringBefore("/")
+            }
+            else -> ""
         }
+        if (packageName.isNotBlank()) return packageName
+        return "root_${rootPath.hashCode().toUInt().toString(16)}"
+    }
+
+    private fun buildSaveFolder(name: String, rootPath: String): String {
+        val normalizedName = name
+            .lowercase()
+            .replace("[^a-z0-9]+".toRegex(), "_")
+            .trim('_')
+            .ifBlank { "scheme" }
+            .take(24)
+        val suffix = rootPath.hashCode().toUInt().toString(16)
+        return "${normalizedName}_$suffix"
+    }
+
+    companion object {
+        private const val DEFAULT_DOUYIN_SCHEME_ID = 1L
     }
 }

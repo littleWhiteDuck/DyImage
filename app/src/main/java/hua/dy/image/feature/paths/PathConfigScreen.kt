@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,7 +20,6 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -79,9 +78,34 @@ fun PathConfigScreen(
     var showSchemeMenu by remember { mutableStateOf(false) }
     var deletingPath by remember { mutableStateOf<ScanPathEntity?>(null) }
     var deletingScheme by remember { mutableStateOf<ScanSchemeEntity?>(null) }
-    var showRestoreConfirm by remember { mutableStateOf(false) }
 
     val activeScheme = uiState.schemes.firstOrNull { it.id == uiState.activeSchemeId }
+    val setSchemeMenuExpanded: (Boolean) -> Unit = { expanded -> showSchemeMenu = expanded }
+
+    val openPathEditorForCreate = {
+        editingPath = null
+        showPathEditor = true
+    }
+    val openPathEditorForEdit: (ScanPathEntity) -> Unit = { path ->
+        editingPath = path
+        showPathEditor = true
+    }
+    val closePathEditor = { showPathEditor = false }
+
+    val openSchemeEditorForCreate = {
+        editingScheme = null
+        showSchemeEditor = true
+    }
+    val openSchemeEditorForEdit = {
+        editingScheme = activeScheme
+        showSchemeEditor = true
+    }
+    val closeSchemeEditor = { showSchemeEditor = false }
+
+    val requestDeletePath: (ScanPathEntity) -> Unit = { path -> deletingPath = path }
+    val dismissDeletePath = { deletingPath = null }
+    val requestDeleteScheme = { deletingScheme = activeScheme }
+    val dismissDeleteScheme = { deletingScheme = null }
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbar.showSnackbar(it) }
@@ -116,25 +140,6 @@ fun PathConfigScreen(
                         )
                     }
                 },
-                actions = {
-                    Row(modifier = Modifier.padding(end = 16.dp)) {
-                        FilledIconButton(
-                            onClick = { showRestoreConfirm = true },
-                            enabled = activeScheme != null,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                            ),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.RestoreFromTrash,
-                                contentDescription = "恢复默认路径",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                 )
@@ -142,10 +147,7 @@ fun PathConfigScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = {
-                    editingPath = null
-                    showPathEditor = true
-                },
+                onClick = openPathEditorForCreate,
                 icon = {
                     Icon(
                         imageVector = Icons.Outlined.Add,
@@ -182,40 +184,30 @@ fun PathConfigScreen(
                     schemes = uiState.schemes,
                     activeScheme = activeScheme,
                     showSchemeMenu = showSchemeMenu,
-                    onShowSchemeMenu = { showSchemeMenu = it },
+                    onShowSchemeMenu = setSchemeMenuExpanded,
                     onSelectScheme = viewModel::selectScheme,
-                    onAddScheme = {
-                        editingScheme = null
-                        showSchemeEditor = true
-                    },
-                    onEditScheme = {
-                        editingScheme = activeScheme
-                        showSchemeEditor = true
-                    },
-                    onDeleteScheme = {
-                        deletingScheme = activeScheme
-                    }
+                    onAddScheme = openSchemeEditorForCreate,
+                    onEditScheme = openSchemeEditorForEdit,
+                    onDeleteScheme = requestDeleteScheme
+                )
+            }
+
+            item {
+                PathSectionHeader(
+                    onAddPath = openPathEditorForCreate
                 )
             }
 
             if (uiState.paths.isEmpty()) {
                 item {
-                    EmptyPathCard(onAdd = {
-                        editingPath = null
-                        showPathEditor = true
-                    })
+                    EmptyPathCard(onAdd = openPathEditorForCreate)
                 }
             } else {
                 items(uiState.paths, key = { it.id }) { item ->
                     PathCard(
                         entity = item,
-                        onEdit = {
-                            editingPath = item
-                            showPathEditor = true
-                        },
-                        onDelete = {
-                            deletingPath = item
-                        },
+                        onEdit = { openPathEditorForEdit(item) },
+                        onDelete = { requestDeletePath(item) },
                         onToggleEnabled = { enabled ->
                             viewModel.updatePathEnabled(item, enabled)
                         }
@@ -228,10 +220,10 @@ fun PathConfigScreen(
     if (showPathEditor) {
         PathEditorDialog(
             initialValue = editingPath,
-            onDismiss = { showPathEditor = false },
+            onDismiss = closePathEditor,
             onConfirm = { id, path, note, enabled ->
                 viewModel.savePath(id, path, note, enabled)
-                showPathEditor = false
+                closePathEditor()
             }
         )
     }
@@ -239,10 +231,10 @@ fun PathConfigScreen(
     if (showSchemeEditor) {
         SchemeEditorDialog(
             initialValue = editingScheme,
-            onDismiss = { showSchemeEditor = false },
-            onConfirm = { id, name, pkg ->
-                viewModel.saveScheme(id, name, pkg)
-                showSchemeEditor = false
+            onDismiss = closeSchemeEditor,
+            onConfirm = { id, name, rootPath ->
+                viewModel.saveScheme(id, name, rootPath)
+                closeSchemeEditor()
             }
         )
     }
@@ -254,35 +246,27 @@ fun PathConfigScreen(
             confirmLabel = "删除",
             onConfirm = {
                 viewModel.deletePath(path)
-                deletingPath = null
+                dismissDeletePath()
             },
-            onDismiss = { deletingPath = null }
+            onDismiss = dismissDeletePath
         )
     }
 
     deletingScheme?.let { scheme ->
+        val deletingLastScheme = uiState.schemes.size <= 1
         ConfirmDialog(
             title = "删除方案",
-            message = "删除方案“${scheme.name}”后，其路径配置也会一起删除。",
+            message = if (deletingLastScheme) {
+                "删除方案“${scheme.name}”后会自动创建抖音默认方案。"
+            } else {
+                "删除方案“${scheme.name}”后，其路径配置也会一起删除。"
+            },
             confirmLabel = "删除",
             onConfirm = {
                 viewModel.deleteScheme(scheme)
-                deletingScheme = null
+                dismissDeleteScheme()
             },
-            onDismiss = { deletingScheme = null }
-        )
-    }
-
-    if (showRestoreConfirm) {
-        ConfirmDialog(
-            title = "恢复默认路径",
-            message = "将清空当前方案的路径并恢复系统默认值。",
-            confirmLabel = "恢复",
-            onConfirm = {
-                viewModel.restoreDefaults()
-                showRestoreConfirm = false
-            },
-            onDismiss = { showRestoreConfirm = false }
+            onDismiss = dismissDeleteScheme
         )
     }
 }
@@ -334,7 +318,7 @@ private fun SchemeCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = activeScheme?.packageName ?: "点击切换扫描方案",
+                            text = activeScheme?.rootPath ?: "点击切换扫描方案",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
                             maxLines = 1,
@@ -368,7 +352,7 @@ private fun SchemeCard(
                                         style = MaterialTheme.typography.bodyLarge
                                     )
                                     Text(
-                                        text = scheme.packageName,
+                                        text = scheme.rootPath,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -411,6 +395,41 @@ private fun SchemeCard(
 }
 
 @Composable
+private fun PathSectionHeader(onAddPath: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "子路径列表",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "相对于主路径进行扫描",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        FloatingActionButton(
+            onClick = onAddPath,
+            modifier = Modifier.size(44.dp),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = "新增子路径",
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun EmptyPathCard(onAdd: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -430,7 +449,7 @@ private fun EmptyPathCard(onAdd: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "你可以新增一条路径，或点击右上角恢复默认路径",
+                text = "点击下方按钮添加一条子路径用于扫描",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -528,7 +547,11 @@ private fun PathCard(
                     ),
                     modifier = Modifier.size(36.dp)
                 ) {
-                    Icon(Icons.Outlined.Edit, contentDescription = "编辑", modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Outlined.Edit,
+                        contentDescription = "编辑",
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 FilledIconButton(
@@ -539,7 +562,11 @@ private fun PathCard(
                     ),
                     modifier = Modifier.size(36.dp)
                 ) {
-                    Icon(Icons.Outlined.Delete, contentDescription = "删除", modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = "删除",
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -640,13 +667,14 @@ private fun PathEditorDialog(
 private fun SchemeEditorDialog(
     initialValue: ScanSchemeEntity?,
     onDismiss: () -> Unit,
-    onConfirm: (id: Long?, name: String, pkg: String) -> Unit
+    onConfirm: (id: Long?, name: String, rootPath: String) -> Unit
 ) {
     var name by remember(initialValue) { mutableStateOf(initialValue?.name ?: "") }
-    var pkg by remember(initialValue) { mutableStateOf(initialValue?.packageName ?: "") }
+    var rootPath by remember(initialValue) { mutableStateOf(initialValue?.rootPath ?: "") }
 
     val nameValid = name.trim().isNotEmpty()
-    val pkgValid = pkg.trim().contains('.')
+    val rootPathValue = rootPath.trim()
+    val rootPathValid = rootPathValue.startsWith("/") && rootPathValue.length > 1
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -668,14 +696,14 @@ private fun SchemeEditorDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
                 OutlinedTextField(
-                    value = pkg,
-                    onValueChange = { pkg = it },
-                    label = { Text("目标应用包名") },
-                    placeholder = { Text("com.ss.android.ugc.aweme") },
-                    isError = pkg.isNotBlank() && !pkgValid,
+                    value = rootPath,
+                    onValueChange = { rootPath = it },
+                    label = { Text("主路径") },
+                    placeholder = { Text("/sdcard/Android/data/com.ss.android.ugc.aweme") },
+                    isError = rootPath.isNotBlank() && !rootPathValid,
                     supportingText = {
-                        if (pkg.isNotBlank() && !pkgValid) {
-                            Text("请输入完整包名")
+                        if (rootPath.isNotBlank() && !rootPathValid) {
+                            Text("主路径必须以 / 开头")
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -685,8 +713,8 @@ private fun SchemeEditorDialog(
         },
         confirmButton = {
             Button(
-                enabled = nameValid && pkgValid,
-                onClick = { onConfirm(initialValue?.id, name.trim(), pkg.trim()) },
+                enabled = nameValid && rootPathValid,
+                onClick = { onConfirm(initialValue?.id, name.trim(), rootPathValue) },
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("保存")

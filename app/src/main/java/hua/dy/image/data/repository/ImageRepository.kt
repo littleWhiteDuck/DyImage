@@ -52,6 +52,9 @@ data class ImagePathIntegritySummary(
 
 object ImageRepository {
 
+    private const val DEFAULT_DOUYIN_PACKAGE = "com.ss.android.ugc.aweme"
+    private const val DEFAULT_DOUYIN_ROOT = "/sdcard/Android/data/com.ss.android.ugc.aweme"
+
     private val defaultDouyinPaths = listOf(
         "/cache/picture/im_fresco_cache/*" to "聊天页面",
         "/cache/picture/fresco_cache/*" to "通用表情"
@@ -67,8 +70,8 @@ object ImageRepository {
                 ScanSchemeEntity(
                     id = 1L,
                     name = "抖音",
-                    packageName = "com.ss.android.ugc.aweme",
-                    rootPath = "/sdcard/Android/data/com.ss.android.ugc.aweme",
+                    packageName = DEFAULT_DOUYIN_PACKAGE,
+                    rootPath = DEFAULT_DOUYIN_ROOT,
                     saveFolder = "douyin"
                 )
             )
@@ -105,7 +108,7 @@ object ImageRepository {
     suspend fun restoreDefaultPathConfigs(schemeId: Long) {
         val scheme = scanSchemeDao.getById(schemeId) ?: return
         scanPathDao.deleteAllByScheme(scheme.id)
-        if (scheme.packageName == "com.ss.android.ugc.aweme") {
+        if (isDefaultDouyinScheme(scheme)) {
             defaultDouyinPaths.forEachIndexed { index, (path, note) ->
                 scanPathDao.upsert(
                     ScanPathEntity(
@@ -207,7 +210,10 @@ object ImageRepository {
             ?: path.relativePath
     }
 
-    fun isSafPermissionGranted(packageName: String): Boolean = hasDyPermission(packageName)
+    fun isSafPermissionGranted(scheme: ScanSchemeEntity): Boolean {
+        val permissionUri = readSafPermissionUri(scheme)
+        return hasDyPermission(permissionUri)
+    }
 
     suspend fun scanConfiguredPaths(
         scheme: ScanSchemeEntity,
@@ -255,7 +261,7 @@ object ImageRepository {
         pathConfigs: List<ScanPathEntity>,
         minSizeBytes: Long
     ): ScanSummary {
-        var permissionUri by SharedPreferenceEntrust(scheme.packageName, "")
+        var permissionUri by SharedPreferenceEntrust(safPermissionKey(scheme), "")
         if (permissionUri.isBlank()) return ScanSummary(false, 0, 0, 0, 0, 0)
         val root = DocumentFile.fromTreeUri(appCtx, Uri.parse(permissionUri))
             ?: return ScanSummary(false, 0, 0, 0, 0, 0)
@@ -418,5 +424,18 @@ object ImageRepository {
         val md5Value = BigInteger(1, md5.digest()).toString(16).padStart(32, '0')
         val type = FileTypeChecker.getType(header.copyOf(headerOffset))
         return Fingerprint(md5 = md5Value, fileType = type)
+    }
+
+    private fun readSafPermissionUri(scheme: ScanSchemeEntity): String {
+        var permissionUri by SharedPreferenceEntrust(safPermissionKey(scheme), "")
+        return permissionUri
+    }
+
+    private fun safPermissionKey(scheme: ScanSchemeEntity): String {
+        return scheme.packageName.ifBlank { "scheme_${scheme.id}" }
+    }
+
+    private fun isDefaultDouyinScheme(scheme: ScanSchemeEntity): Boolean {
+        return scheme.packageName == DEFAULT_DOUYIN_PACKAGE || scheme.rootPath == DEFAULT_DOUYIN_ROOT
     }
 }

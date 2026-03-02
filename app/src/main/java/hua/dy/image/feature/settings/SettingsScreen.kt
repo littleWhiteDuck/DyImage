@@ -76,6 +76,15 @@ fun SettingsScreen(
     var showMinSizeMenu by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
+    val openThemeMenu = { showThemeMenu = true }
+    val closeThemeMenu = { showThemeMenu = false }
+    val openSortMenu = { showSortMenu = true }
+    val closeSortMenu = { showSortMenu = false }
+    val openMinSizeMenu = { showMinSizeMenu = true }
+    val closeMinSizeMenu = { showMinSizeMenu = false }
+    val openClearConfirm = { showClearConfirm = true }
+    val closeClearConfirm = { showClearConfirm = false }
+
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { message ->
             snackbarHostState.showSnackbar(message)
@@ -144,21 +153,21 @@ fun SettingsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Box {
                             FilledTonalButton(
-                                onClick = { showThemeMenu = true },
+                                onClick = openThemeMenu,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("主题模式：${themeModeText(uiState.themeMode)}")
                             }
                             DropdownMenu(
                                 expanded = showThemeMenu,
-                                onDismissRequest = { showThemeMenu = false }
+                                onDismissRequest = closeThemeMenu
                             ) {
                                 themeModeOptions().forEach { (mode, label) ->
                                     DropdownMenuItem(
                                         text = { Text(label) },
                                         onClick = {
                                             viewModel.updateThemeMode(mode)
-                                            showThemeMenu = false
+                                            closeThemeMenu()
                                         }
                                     )
                                 }
@@ -192,21 +201,21 @@ fun SettingsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Box {
                             FilledTonalButton(
-                                onClick = { showSortMenu = true },
+                                onClick = openSortMenu,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("默认排序：${SortOptions.labels[uiState.sortType]}")
                             }
                             DropdownMenu(
                                 expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false }
+                                onDismissRequest = closeSortMenu
                             ) {
                                 SortOptions.labels.forEachIndexed { index, label ->
                                     DropdownMenuItem(
                                         text = { Text(label) },
                                         onClick = {
                                             viewModel.updateSortType(index)
-                                            showSortMenu = false
+                                            closeSortMenu()
                                         }
                                     )
                                 }
@@ -215,21 +224,21 @@ fun SettingsScreen(
 
                         Box {
                             FilledTonalButton(
-                                onClick = { showMinSizeMenu = true },
+                                onClick = openMinSizeMenu,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("最小扫描文件大小：${uiState.minScanFileSizeKb} KB")
                             }
                             DropdownMenu(
                                 expanded = showMinSizeMenu,
-                                onDismissRequest = { showMinSizeMenu = false }
+                                onDismissRequest = closeMinSizeMenu
                             ) {
                                 minSizeOptions.forEach { size ->
                                     DropdownMenuItem(
                                         text = { Text("$size KB") },
                                         onClick = {
                                             viewModel.updateMinScanFileSizeKb(size)
-                                            showMinSizeMenu = false
+                                            closeMinSizeMenu()
                                         }
                                     )
                                 }
@@ -245,7 +254,7 @@ fun SettingsScreen(
 
                         Button(
                             enabled = !isClearing,
-                            onClick = { showClearConfirm = true },
+                            onClick = openClearConfirm,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -300,13 +309,13 @@ fun SettingsScreen(
 
     if (showClearConfirm) {
         AlertDialog(
-            onDismissRequest = { showClearConfirm = false },
+            onDismissRequest = closeClearConfirm,
             title = { Text("清空扫描数据并重扫") },
             text = { Text("此操作只会清空扫描产生的图片索引与缓存图片，不会删除路径配置和设置项，然后立即重新扫描。") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showClearConfirm = false
+                        closeClearConfirm()
                         viewModel.clearDatabaseAndRescan()
                     }
                 ) {
@@ -314,7 +323,7 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) {
+                TextButton(onClick = closeClearConfirm) {
                     Text("取消")
                 }
             }
