@@ -7,15 +7,16 @@ plugins {
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.kotlinKsp)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.lsplugin.jgit)
 }
-apply(plugin = "org.jetbrains.kotlin.plugin.parcelize")
 
 val configFile = rootProject.file("sign.properties")
 val prop = Properties()
 prop.load(FileInputStream(configFile))
 
-val verCode = 7
-val verName = "0.7"
+val repo = jgit.repo()
+val verCode = (repo?.commitCount("refs/remotes/origin/main") ?: 1)
+val verName = repo?.latestTag?.removePrefix("v") ?: "0.1"
 
 android {
     namespace = "hua.dy.image"

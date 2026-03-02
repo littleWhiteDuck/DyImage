@@ -567,12 +567,6 @@ fun GalleryScreen(
                 ScanningBanner(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
 
-            if (selectionMode) {
-                SelectionHintCard(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    failedCount = failedCount
-                )
-            }
 
             HorizontalPager(
                 state = pagerState,
@@ -748,29 +742,6 @@ private fun BatchActionBar(
     }
 }
 
-@Composable
-private fun SelectionHintCard(
-    modifier: Modifier = Modifier,
-    failedCount: Int
-) {
-    val message = if (failedCount > 0) {
-        "已标记转换失败项，可继续批量保存/分享（自动使用原图）"
-    } else {
-        "长按图片进入多选，点按继续勾选。支持批量转换、保存、分享"
-    }
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
-    ) {
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-        )
-    }
-}
 
 @Composable
 private fun GalleryGridPage(

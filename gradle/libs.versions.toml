@@ -23,6 +23,7 @@ ksp = "2.3.2"
 shizuku = "13.1.5"
 material3 = "1.5.0-alpha15"
 material-icons-extended-android = "1.7.8"
+lsplugin-jgit = "1.1"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
@@ -64,6 +65,7 @@ androidApplication = { id = "com.android.application", version.ref = "agp" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinKsp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+lsplugin-jgit = { id = "org.lsposed.lsplugin.jgit", version.ref = "lsplugin-jgit" }
 
 [bundles]
 
