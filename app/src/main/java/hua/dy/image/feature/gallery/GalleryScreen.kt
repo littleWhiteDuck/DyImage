@@ -1,5 +1,6 @@
-﻿package hua.dy.image.feature.gallery
+package hua.dy.image.feature.gallery
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -7,6 +8,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -30,10 +33,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.ImageNotSupported
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -45,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -53,6 +60,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -61,6 +69,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,12 +98,29 @@ import hua.dy.image.shareOtherApp
 import hua.dy.image.ui.components.SortBottomDialog
 import hua.dy.image.utils.FileType
 import hua.dy.image.utils.GetDyPermission
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+private data class MultiSelectedImage(
+    val md5: String,
+    val imagePath: String,
+    val fileType: FileType
+)
+
+private data class BatchConvertSummary(
+    val attempted: Int,
+    val skipped: Int,
+    val successMap: Map<String, String>,
+    val failedIds: Set<String>
+)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun GalleryScreen(
     contentPadding: PaddingValues,
+    onBottomBarVisibleChange: (Boolean) -> Unit = {},
     viewModel: GalleryViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -116,6 +142,43 @@ fun GalleryScreen(
     var showSortDialog by remember { mutableStateOf(false) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var dialogImage by remember { mutableStateOf<Pair<String, FileType>?>(null) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var batchWorking by remember { mutableStateOf(false) }
+    val selectedItems = remember { mutableStateMapOf<String, MultiSelectedImage>() }
+    val convertedGifByMd5 = remember { mutableStateMapOf<String, String>() }
+    val failedConvertByMd5 = remember { mutableStateMapOf<String, Boolean>() }
+
+    val selectedCount = selectedItems.size
+    val convertibleCount = selectedItems.values.count { item ->
+        isGifConvertible(path = item.imagePath, fileType = item.fileType)
+    }
+    val convertedCount = selectedItems.keys.count { convertedGifByMd5.containsKey(it) }
+    val failedCount = selectedItems.keys.count { failedConvertByMd5.containsKey(it) }
+
+    fun clearSelectionState() {
+        selectionMode = false
+        batchWorking = false
+        selectedItems.clear()
+        convertedGifByMd5.clear()
+        failedConvertByMd5.clear()
+    }
+
+    fun toggleSelection(item: ImageBean) {
+        if (selectedItems.containsKey(item.md5)) {
+            selectedItems.remove(item.md5)
+            convertedGifByMd5.remove(item.md5)
+            failedConvertByMd5.remove(item.md5)
+        } else {
+            selectedItems[item.md5] = MultiSelectedImage(
+                md5 = item.md5,
+                imagePath = item.imagePath,
+                fileType = item.fileType
+            )
+        }
+        if (selectedItems.isEmpty()) {
+            selectionMode = false
+        }
+    }
 
     val imageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -137,113 +200,158 @@ fun GalleryScreen(
         permissionState = viewModel.hasPermission
     }
 
+    LaunchedEffect(activeScheme.id, selectedFilter.path, pagerState.currentPage) {
+        if (selectionMode) {
+            clearSelectionState()
+        }
+    }
+
+    LaunchedEffect(selectionMode) {
+        onBottomBarVisibleChange(!selectionMode)
+    }
+
+    BackHandler(enabled = selectionMode) {
+        clearSelectionState()
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "EImage",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "方案：${activeScheme.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    if (selectionMode) {
+                        Column {
+                            Text(
+                                text = "已选择 $selectedCount 项",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "可转 $convertibleCount · 已转 $convertedCount · 失败 $failedCount",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        Column {
+                            Text(
+                                text = "EImage",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "方案：${activeScheme.name}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 actions = {
-                    Row(
-                        modifier = Modifier.padding(end = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box {
-                            FilledIconButton(
-                                onClick = { showFilterMenu = true },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = if (selectedFilter.isAll) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.primary
-                                    },
-                                    contentColor = if (selectedFilter.isAll) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onPrimary
+                    if (selectionMode) {
+                        TextButton(
+                            enabled = !batchWorking,
+                            onClick = { clearSelectionState() },
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("退出多选")
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.padding(end = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box {
+                                FilledIconButton(
+                                    onClick = { showFilterMenu = true },
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = if (selectedFilter.isAll) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        },
+                                        contentColor = if (selectedFilter.isAll) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        }
+                                    ),
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.FilterAlt,
+                                        contentDescription = "筛选路径",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                if (!selectedFilter.isAll) {
+                                    Badge(modifier = Modifier.align(Alignment.TopEnd))
+                                }
+                                DropdownMenu(
+                                    expanded = showFilterMenu,
+                                    onDismissRequest = { showFilterMenu = false }
+                                ) {
+                                    filterOptions.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                val prefix = if (selectedFilter.path == option.path) "✓ " else ""
+                                                Text(prefix + option.label)
+                                            },
+                                            onClick = {
+                                                viewModel.updatePathFilter(option)
+                                                showFilterMenu = false
+                                            }
+                                        )
                                     }
+                                }
+                            }
+
+                            FilledIconButton(
+                                onClick = { showSortDialog = true },
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 ),
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.FilterAlt,
-                                    contentDescription = "筛选路径",
+                                    imageVector = Icons.AutoMirrored.Outlined.Sort,
+                                    contentDescription = "排序",
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                            if (!selectedFilter.isAll) {
-                                Badge(modifier = Modifier.align(Alignment.TopEnd))
-                            }
-                            DropdownMenu(
-                                expanded = showFilterMenu,
-                                onDismissRequest = { showFilterMenu = false }
+
+                            FilledIconButton(
+                                enabled = !isScanning,
+                                onClick = {
+                                    permissionState = viewModel.hasPermission
+                                    if (permissionState) {
+                                        viewModel.refresh()
+                                    } else {
+                                        permissionRequestKey += 1
+                                    }
+                                },
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                filterOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            val prefix = if (selectedFilter.path == option.path) "✓ " else ""
-                                            Text(prefix + option.label)
-                                        },
-                                        onClick = {
-                                            viewModel.updatePathFilter(option)
-                                            showFilterMenu = false
-                                        }
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Outlined.Refresh,
+                                    contentDescription = "立即扫描",
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
-                        }
-
-                        FilledIconButton(
-                            onClick = { showSortDialog = true },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.Sort,
-                                contentDescription = "排序",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        FilledIconButton(
-                            enabled = !isScanning,
-                            onClick = {
-                                permissionState = viewModel.hasPermission
-                                if (permissionState) {
-                                    viewModel.refresh()
-                                } else {
-                                    permissionRequestKey += 1
-                                }
-                            },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Refresh,
-                                contentDescription = "立即扫描",
-                                modifier = Modifier.size(20.dp)
-                            )
                         }
                     }
                 },
@@ -252,10 +360,120 @@ fun GalleryScreen(
                 )
             )
         },
+        bottomBar = {
+            if (selectionMode) {
+                BatchActionBar(
+                    selectedCount = selectedCount,
+                    convertibleCount = convertibleCount,
+                    failedCount = failedCount,
+                    isWorking = batchWorking,
+                    onConvert = {
+                        if (!batchWorking && selectedCount > 0) {
+                            scope.launch {
+                                val snapshot = selectedItems.values.toList()
+                                if (snapshot.none { isGifConvertible(it.imagePath, it.fileType) }) {
+                                    snackBarHostState.showSnackbar("当前选择中没有可转换项（仅支持 WEBP/HEIC）")
+                                    return@launch
+                                }
+                                batchWorking = true
+                                val summary = withContext(Dispatchers.IO) {
+                                    val successMap = mutableMapOf<String, String>()
+                                    val failedIds = mutableSetOf<String>()
+                                    var attempted = 0
+                                    var skipped = 0
+                                    snapshot.forEach { item ->
+                                        if (!isGifConvertible(item.imagePath, item.fileType)) {
+                                            skipped += 1
+                                            return@forEach
+                                        }
+                                        attempted += 1
+                                        val convertedPath = convertToGif(item.imagePath, item.md5)
+                                        if (convertedPath != null) {
+                                            successMap[item.md5] = convertedPath
+                                        } else {
+                                            failedIds.add(item.md5)
+                                        }
+                                    }
+                                    BatchConvertSummary(
+                                        attempted = attempted,
+                                        skipped = skipped,
+                                        successMap = successMap,
+                                        failedIds = failedIds
+                                    )
+                                }
+                                summary.successMap.forEach { (md5, path) ->
+                                    if (selectedItems.containsKey(md5)) {
+                                        convertedGifByMd5[md5] = path
+                                        failedConvertByMd5.remove(md5)
+                                    }
+                                }
+                                summary.failedIds.forEach { md5 ->
+                                    if (selectedItems.containsKey(md5)) {
+                                        failedConvertByMd5[md5] = true
+                                        convertedGifByMd5.remove(md5)
+                                    }
+                                }
+                                batchWorking = false
+                                snackBarHostState.showSnackbar(
+                                    "转换完成：成功 ${summary.successMap.size}，失败 ${summary.failedIds.size}，跳过 ${summary.skipped}。失败项仍可保存/分享原图"
+                                )
+                            }
+                        }
+                    },
+                    onSave = {
+                        if (!batchWorking && selectedCount > 0) {
+                            scope.launch {
+                                batchWorking = true
+                                val snapshot = selectedItems.values.toList()
+                                val convertedSnapshot = convertedGifByMd5.toMap()
+                                val result = withContext(Dispatchers.IO) {
+                                    var success = 0
+                                    var failed = 0
+                                    snapshot.forEach { item ->
+                                        val path = convertedSnapshot[item.md5] ?: item.imagePath
+                                        if (saveImageToLocal(path)) success += 1 else failed += 1
+                                    }
+                                    success to failed
+                                }
+                                batchWorking = false
+                                snackBarHostState.showSnackbar("保存完成：成功 ${result.first}，失败 ${result.second}")
+                            }
+                        }
+                    },
+                    onShare = {
+                        if (!batchWorking && selectedCount > 0) {
+                            scope.launch {
+                                batchWorking = true
+                                val snapshot = selectedItems.values.toList()
+                                val convertedSnapshot = convertedGifByMd5.toMap()
+                                val sharePaths = withContext(Dispatchers.IO) {
+                                    snapshot.mapNotNull { item ->
+                                        val path = convertedSnapshot[item.md5] ?: item.imagePath
+                                        val resolved = resolveSharePath(path)
+                                        val file = File(resolved)
+                                        if (file.exists()) file.absolutePath else null
+                                    }.distinct()
+                                }
+                                batchWorking = false
+                                if (sharePaths.isEmpty()) {
+                                    snackBarHostState.showSnackbar("没有可分享的文件")
+                                } else {
+                                    context.shareOtherApp(sharePaths)
+                                    snackBarHostState.showSnackbar("已发起分享 ${sharePaths.size} 项")
+                                }
+                            }
+                        }
+                    },
+                    onClear = { clearSelectionState() }
+                )
+            }
+        },
         snackbarHost = {
             SnackbarHost(
                 hostState = snackBarHostState,
-                modifier = Modifier.padding(bottom = contentPadding.calculateBottomPadding() + 8.dp)
+                modifier = Modifier.padding(
+                    bottom = if (selectionMode) 0.dp else contentPadding.calculateBottomPadding() + 8.dp
+                )
             )
         }
     ) { innerPadding ->
@@ -264,7 +482,7 @@ fun GalleryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (!selectedFilter.isAll) {
+            if (!selectionMode && !selectedFilter.isAll) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -345,6 +563,13 @@ fun GalleryScreen(
                 ScanningBanner(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
 
+            if (selectionMode) {
+                SelectionHintCard(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    failedCount = failedCount
+                )
+            }
+
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
@@ -366,8 +591,25 @@ fun GalleryScreen(
                         imageData = imageData,
                         type = type,
                         imageLoader = imageLoader,
-                        bottomPadding = contentPadding.calculateBottomPadding() + 16.dp,
-                        onImageClick = { item -> dialogImage = item.imagePath to item.fileType },
+                        bottomPadding = if (selectionMode) 148.dp else contentPadding.calculateBottomPadding() + 16.dp,
+                        selectionMode = selectionMode,
+                        selectedIds = selectedItems.keys,
+                        convertedIds = convertedGifByMd5.keys,
+                        failedIds = failedConvertByMd5.keys,
+                        onImageTap = { item ->
+                            if (selectionMode) {
+                                toggleSelection(item)
+                            } else {
+                                dialogImage = item.imagePath to item.fileType
+                            }
+                        },
+                        onImageLongPress = { item ->
+                            if (!selectionMode) {
+                                selectionMode = true
+                                dialogImage = null
+                            }
+                            toggleSelection(item)
+                        },
                         onRetry = {
                             viewModel.refresh()
                             imageData.retry()
@@ -378,7 +620,7 @@ fun GalleryScreen(
         }
     }
 
-    if (showSortDialog) {
+    if (!selectionMode && showSortDialog) {
         SortBottomDialog(
             sortValue = sortType,
             onclick = {
@@ -389,13 +631,15 @@ fun GalleryScreen(
         )
     }
 
-    dialogImage?.let { (path, type) ->
-        ShareImageDialog(
-            imagePath = path,
-            fileType = type,
-            onDismiss = { dialogImage = null },
-            onShare = { sharePath -> context.shareOtherApp(sharePath) }
-        )
+    if (!selectionMode) {
+        dialogImage?.let { (path, type) ->
+            ShareImageDialog(
+                imagePath = path,
+                fileType = type,
+                onDismiss = { dialogImage = null },
+                onShare = { sharePath -> context.shareOtherApp(sharePath) }
+            )
+        }
     }
 
     if (!permissionState) {
@@ -421,12 +665,120 @@ fun GalleryScreen(
 }
 
 @Composable
+private fun BatchActionBar(
+    selectedCount: Int,
+    convertibleCount: Int,
+    failedCount: Int,
+    isWorking: Boolean,
+    onConvert: () -> Unit,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+    onClear: () -> Unit
+) {
+    Surface(
+        tonalElevation = 4.dp,
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "多选模式：$selectedCount 项（可转换 $convertibleCount）",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                TextButton(enabled = !isWorking, onClick = onClear) {
+                    Text("清空选择")
+                }
+            }
+
+            if (failedCount > 0) {
+                Text(
+                    text = "已有 $failedCount 项转换失败，保存和分享会自动回退到原图",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onConvert,
+                    enabled = !isWorking && convertibleCount > 0,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("转换 GIF")
+                }
+                OutlinedButton(
+                    onClick = onSave,
+                    enabled = !isWorking && selectedCount > 0,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("保存")
+                }
+                Button(
+                    onClick = onShare,
+                    enabled = !isWorking && selectedCount > 0,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("分享")
+                }
+            }
+
+            if (isWorking) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionHintCard(
+    modifier: Modifier = Modifier,
+    failedCount: Int
+) {
+    val message = if (failedCount > 0) {
+        "已标记转换失败项，可继续批量保存/分享（自动使用原图）"
+    } else {
+        "长按图片进入多选，点按继续勾选。支持批量转换、保存、分享"
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
 private fun GalleryGridPage(
     imageData: LazyPagingItems<ImageBean>,
     type: FileType,
     imageLoader: ImageLoader,
     bottomPadding: Dp,
-    onImageClick: (ImageBean) -> Unit,
+    selectionMode: Boolean,
+    selectedIds: Set<String>,
+    convertedIds: Set<String>,
+    failedIds: Set<String>,
+    onImageTap: (ImageBean) -> Unit,
+    onImageLongPress: (ImageBean) -> Unit,
     onRetry: () -> Unit
 ) {
     val context = LocalContext.current
@@ -473,16 +825,26 @@ private fun GalleryGridPage(
                 key = { index -> imageData.peek(index)?.md5 ?: "loading_$index" }
             ) { index ->
                 val item = imageData[index] ?: return@items
+                val isSelected = selectedIds.contains(item.md5)
+                val converted = convertedIds.contains(item.md5)
+                val convertFailed = failedIds.contains(item.md5)
                 Card(
                     modifier = Modifier
                         .aspectRatio(1f)
-                        .clickable { onImageClick(item) },
+                        .combinedClickable(
+                            onClick = { onImageTap(item) },
+                            onLongClick = { onImageLongPress(item) }
+                        ),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        containerColor = if (selectionMode && isSelected) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
                     ),
                     elevation = CardDefaults.cardElevation(
-                        defaultElevation = 2.dp,
+                        defaultElevation = if (selectionMode && isSelected) 4.dp else 2.dp,
                         pressedElevation = 6.dp
                     )
                 ) {
@@ -522,6 +884,57 @@ private fun GalleryGridPage(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        if (selectionMode) {
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(8.dp)
+                                    .size(22.dp),
+                                shape = CircleShape,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f)
+                                }
+                            ) {
+                                if (isSelected) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isSelected && (converted || convertFailed)) {
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(8.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (convertFailed) {
+                                    MaterialTheme.colorScheme.errorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                }
+                            ) {
+                                Text(
+                                    text = if (convertFailed) "转失败" else "GIF",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (convertFailed) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onTertiaryContainer
+                                    },
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                 )
                             }
                         }

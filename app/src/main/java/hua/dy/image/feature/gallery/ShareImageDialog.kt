@@ -1,9 +1,5 @@
-﻿package hua.dy.image.feature.gallery
+package hua.dy.image.feature.gallery
 
-import android.content.ContentValues
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,14 +49,11 @@ import coil3.compose.AsyncImage
 import coil3.gif.GifDecoder
 import coil3.request.ImageRequest
 import hua.dy.image.utils.FileType
-import hua.dy.image.utils.X2GifUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,9 +77,7 @@ fun ShareImageDialog(
     val fileLabel = sourceFile.name.ifBlank { "未命名文件" }
     val fileSizeLabel = remember(sourceFile.length()) { formatSize(sourceFile.length()) }
 
-    val isConvertible =
-        (currentPath.endsWith(".webp", true) || currentPath.endsWith(".heic", true)) &&
-            !currentPath.endsWith(".gif", true)
+    val isConvertible = isGifConvertible(currentPath, fileType)
     val shouldSkipPreview = fileType == FileType.UNKNOWN || fileType == FileType.VVIC
 
     val imageLoader = remember {
@@ -267,17 +258,18 @@ fun ShareImageDialog(
                         scope.launch {
                             isWorking = true
                             statusMessage = null
-                            val target = File(appCtx.externalCacheDir, "image_share/share.gif")
-                            target.parentFile?.mkdirs()
-                            val success = withContext(Dispatchers.IO) {
-                                X2GifUtils.convert(currentPath, target.absolutePath)
+                            val convertedPath = withContext(Dispatchers.IO) {
+                                convertToGif(
+                                    sourcePath = currentPath,
+                                    nameSeed = sourceFile.nameWithoutExtension
+                                )
                             }
-                            if (success) {
-                                currentPath = target.absolutePath
+                            if (convertedPath != null) {
+                                currentPath = convertedPath
                                 statusMessage = "已转换为 GIF，可直接分享"
                                 statusIsError = false
                             } else {
-                                statusMessage = "转换失败，请直接分享原图"
+                                statusMessage = "转换失败（部分 HEIC 静态图不支持），可继续分享原图"
                                 statusIsError = true
                             }
                             isWorking = false
@@ -289,21 +281,21 @@ fun ShareImageDialog(
                 }
             }
 
-                Button(
-                    enabled = !isWorking,
-                    onClick = {
-                        scope.launch {
-                            isWorking = true
-                            val sharePath = withContext(Dispatchers.IO) {
-                                resolveSharePath(currentPath)
-                            }
-                            isWorking = false
-                            onShare(sharePath)
-                            onDismiss()
+            Button(
+                enabled = !isWorking,
+                onClick = {
+                    scope.launch {
+                        isWorking = true
+                        val sharePath = withContext(Dispatchers.IO) {
+                            resolveSharePath(currentPath)
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                        isWorking = false
+                        onShare(sharePath)
+                        onDismiss()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.Share,
                     contentDescription = null,
@@ -314,65 +306,6 @@ fun ShareImageDialog(
             }
         }
     }
-}
-
-private fun saveImageToLocal(path: String): Boolean {
-    val source = File(path)
-    if (!source.exists()) return false
-    val rawExtension = source.extension.ifBlank { "png" }.lowercase(Locale.ROOT)
-    val extension = if (rawExtension == "vvic") "heic" else rawExtension
-    val mime = when (extension) {
-        "jpg", "jpeg" -> "image/jpeg"
-        "gif" -> "image/gif"
-        "webp" -> "image/webp"
-        "heic" -> "image/heic"
-        else -> "image/png"
-    }
-    val fileName = "EImage_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.CHINA).format(Date())}.$extension"
-    val values = ContentValues().apply {
-        put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-        put(MediaStore.Images.Media.MIME_TYPE, mime)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/EImage")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
-    }
-    val resolver = appCtx.contentResolver
-    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
-    val copied = runCatching {
-        resolver.openOutputStream(uri)?.use { out ->
-            source.inputStream().use { input ->
-                input.copyTo(out)
-            }
-        } ?: return false
-    }.isSuccess
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        values.clear()
-        values.put(MediaStore.Images.Media.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-    }
-    if (!copied) {
-        resolver.delete(uri, null, null)
-    }
-    return copied
-}
-
-private fun resolveSharePath(path: String): String {
-    val source = File(path)
-    if (!source.exists()) return path
-    if (!source.extension.equals("vvic", ignoreCase = true)) return path
-
-    val targetDir = File(appCtx.externalCacheDir, "image_share/share_alias")
-    if (!targetDir.exists()) targetDir.mkdirs()
-    val target = File(targetDir, "${source.nameWithoutExtension}.heic")
-    return runCatching {
-        source.inputStream().use { input ->
-            target.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
-        target.absolutePath
-    }.getOrDefault(path)
 }
 
 private fun formatSize(bytes: Long): String {

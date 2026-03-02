@@ -1,5 +1,10 @@
 package hua.dy.image.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -18,7 +23,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -40,6 +49,12 @@ fun EImageApp() {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val tabs = MainDestination.entries
+    var bottomBarVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != MainDestination.Gallery.route) {
+            bottomBarVisible = true
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -63,56 +78,62 @@ fun EImageApp() {
                 modifier = Modifier.fillMaxSize(),
                 containerColor = Color.Transparent,
                 bottomBar = {
-                    NavigationBar(
-                        modifier = Modifier
-                            .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .clip(RoundedCornerShape(24.dp)),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.95f),
-                        tonalElevation = 8.dp
+                    AnimatedVisibility(
+                        visible = bottomBarVisible,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                     ) {
-                        tabs.forEach { destination ->
-                            val isSelected = currentRoute == destination.route
-                            val scale by animateFloatAsState(
-                                targetValue = if (isSelected) 1.1f else 1.0f,
-                                animationSpec = tween(200),
-                                label = "icon_scale"
-                            )
-
-                            NavigationBarItem(
-                                selected = isSelected,
-                                onClick = {
-                                    if (currentRoute != destination.route) {
-                                        navController.navigate(destination.route) {
-                                            popUpTo(MainDestination.Gallery.route) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = destination.icon,
-                                        contentDescription = destination.title,
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .scale(scale)
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = destination.title,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                        NavigationBar(
+                            modifier = Modifier
+                                .navigationBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .clip(RoundedCornerShape(24.dp)),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.95f),
+                            tonalElevation = 8.dp
+                        ) {
+                            tabs.forEach { destination ->
+                                val isSelected = currentRoute == destination.route
+                                val scale by animateFloatAsState(
+                                    targetValue = if (isSelected) 1.1f else 1.0f,
+                                    animationSpec = tween(200),
+                                    label = "icon_scale"
                                 )
-                            )
+
+                                NavigationBarItem(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (currentRoute != destination.route) {
+                                            navController.navigate(destination.route) {
+                                                popUpTo(MainDestination.Gallery.route) { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = destination.icon,
+                                            contentDescription = destination.title,
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .scale(scale)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = destination.title,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -123,7 +144,12 @@ fun EImageApp() {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     composable(MainDestination.Gallery.route) {
-                        GalleryScreen(contentPadding = paddingValues)
+                        GalleryScreen(
+                            contentPadding = paddingValues,
+                            onBottomBarVisibleChange = { visible ->
+                                bottomBarVisible = visible
+                            }
+                        )
                     }
                     composable(MainDestination.Paths.route) {
                         PathConfigScreen(contentPadding = paddingValues)

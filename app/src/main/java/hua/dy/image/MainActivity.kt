@@ -1,8 +1,10 @@
 package hua.dy.image
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.Window
 import androidx.activity.ComponentActivity
@@ -61,13 +63,31 @@ fun UpdateStatusBar(window: Window, darkIcons: Boolean) {
 }
 
 fun Context.shareOtherApp(imagePath: String) {
-    val imageFile = File(imagePath)
-    if (!imageFile.exists()) return
-    val uri = FileProvider.getUriForFile(this, SHARED_PROVIDER, imageFile)
-    val intent = Intent(Intent.ACTION_SEND).apply {
+    shareOtherApp(listOf(imagePath))
+}
+
+fun Context.shareOtherApp(imagePaths: List<String>) {
+    val uris: List<Uri> = imagePaths
+        .mapNotNull { path ->
+            val imageFile = File(path)
+            if (!imageFile.exists()) return@mapNotNull null
+            runCatching { FileProvider.getUriForFile(this, SHARED_PROVIDER, imageFile) }.getOrNull()
+        }
+        .distinct()
+    if (uris.isEmpty()) return
+
+    val isSingle = uris.size == 1
+    val intent = Intent(if (isSingle) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
         type = "image/*"
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        putExtra(Intent.EXTRA_STREAM, uri)
+        clipData = ClipData.newUri(contentResolver, "image", uris.first()).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
+        if (isSingle) {
+            putExtra(Intent.EXTRA_STREAM, uris.first())
+        } else {
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+        }
     }
     startActivity(Intent.createChooser(intent, "分享图片"))
 }
