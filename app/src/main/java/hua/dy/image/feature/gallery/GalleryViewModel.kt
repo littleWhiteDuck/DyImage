@@ -212,7 +212,6 @@ class GalleryViewModel : ViewModel() {
                 ImageRepository.scanConfiguredPaths(
                     scheme = scheme,
                     minFileSizeKb = settings.minScanFileSizeKb,
-                    sortType = settings.sortType,
                     preferShizuku = settings.preferShizuku
                 )
             }
@@ -254,7 +253,7 @@ class GalleryViewModel : ViewModel() {
 
             if (integrity.shouldRebuild) {
                 _messageFlow.emit(
-                    "启动检测到 ${integrity.sampled} 条图片路径中有 ${integrity.missing} 条失效，数据可能被清理软件删除，正在重建数据库…"
+                    "启动检测到 ${integrity.sampled} 条图片路径中有 ${integrity.missing} 条失效，扫描数据可能被清理软件删除，正在重建扫描索引…"
                 )
                 clearAllAndRescan(settings)
             }
@@ -267,7 +266,6 @@ class GalleryViewModel : ViewModel() {
             ImageRepository.clearAllDatabaseAndRescan(
                 preferredSchemeId = settings.activeSchemeId,
                 minSizeKb = settings.minScanFileSizeKb,
-                sortType = settings.sortType,
                 preferShizuku = settings.preferShizuku
             )
         }

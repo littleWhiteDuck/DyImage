@@ -1,6 +1,5 @@
 ﻿package hua.dy.image.feature.paths
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hua.dy.image.db.ScanPathEntity
@@ -317,24 +317,63 @@ private fun SchemeCard(
             )
 
             Box {
-                OutlinedTextField(
-                    value = activeScheme?.name ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("方案") },
-                    placeholder = { Text("请选择方案") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onShowSchemeMenu(true) },
-                    shape = RoundedCornerShape(12.dp)
-                )
+                FilledTonalButton(
+                    onClick = { onShowSchemeMenu(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = activeScheme?.name ?: "请选择方案",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = activeScheme?.packageName ?: "点击切换扫描方案",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
+                    ) {
+                        Text(
+                            text = "切换",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
                 DropdownMenu(
                     expanded = showSchemeMenu,
                     onDismissRequest = { onShowSchemeMenu(false) }
                 ) {
                     schemes.forEach { scheme ->
+                        val isActive = activeScheme?.id == scheme.id
                         DropdownMenuItem(
-                            text = { Text("${scheme.name} (${scheme.packageName})") },
+                            text = {
+                                Column {
+                                    Text(
+                                        text = if (isActive) "✓ ${scheme.name}" else scheme.name,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = scheme.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
                             onClick = {
                                 onShowSchemeMenu(false)
                                 onSelectScheme(scheme.id)

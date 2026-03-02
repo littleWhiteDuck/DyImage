@@ -94,21 +94,7 @@ class FileExplorerService : IFileExplorerService.Stub() {
         return md5Text to type
     }
 
-    fun FileBean.generalFileName(): String {
-//    val subNameResult = runCatching {
-//        this.name?.substring(0,5)
-//    }
-//    val subName = if (subNameResult.isFailure) {
-//        this.name
-//    } else subNameResult.getOrThrow()
-//    return "${subName}_${simpleDateFormat.format(lastModified())}"
-        return "${name?.replace(".cnt", "")}"
-    }
-
-
     companion object {
-        private const val TAG = "FileExplorerService"
-
         var service: IFileExplorerService? = null
     }
 }

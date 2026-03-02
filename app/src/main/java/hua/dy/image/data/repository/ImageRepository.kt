@@ -3,13 +3,11 @@
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import androidx.paging.PagingSource
-import androidx.room.withTransaction
 import hua.dy.image.bean.FileBean
 import hua.dy.image.bean.ImageBean
 import hua.dy.image.db.ScanPathEntity
 import hua.dy.image.db.ScanSchemeEntity
 import hua.dy.image.db.dyImageDao
-import hua.dy.image.db.dyImageDb
 import hua.dy.image.db.scanPathDao
 import hua.dy.image.db.scanSchemeDao
 import hua.dy.image.service.FileExplorerService
@@ -19,7 +17,6 @@ import hua.dy.image.utils.FileTypeChecker
 import hua.dy.image.utils.SharedPreferenceEntrust
 import hua.dy.image.utils.findDocument
 import hua.dy.image.utils.hasDyPermission
-import hua.dy.image.utils.sortValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -159,27 +156,13 @@ object ImageRepository {
         )
     }
 
-    suspend fun clearAllImagesAndRescan(
-        schemeId: Long,
-        minSizeKb: Int,
-        sortType: Int,
-        preferShizuku: Boolean
-    ): ScanSummary {
-        return clearAllDatabaseAndRescan(
-            preferredSchemeId = schemeId,
-            minSizeKb = minSizeKb,
-            sortType = sortType,
-            preferShizuku = preferShizuku
-        ).scanSummary
-    }
-
     suspend fun clearAllDatabaseAndRescan(
         preferredSchemeId: Long,
         minSizeKb: Int,
-        sortType: Int,
         preferShizuku: Boolean
     ): ClearAndRescanSummary = withContext(Dispatchers.IO) {
-        clearAllDatabaseContent()
+        // Keep user schemes/path configs/settings. Only clear scanned image index + copied cache files.
+        clearScannedImageData()
         clearImageCacheFiles()
         ensureDefaultSchemeAndPaths()
 
@@ -191,7 +174,7 @@ object ImageRepository {
             )
         }
 
-        val summary = scanConfiguredPaths(scheme, minSizeKb, sortType, preferShizuku)
+        val summary = scanConfiguredPaths(scheme, minSizeKb, preferShizuku)
         ClearAndRescanSummary(schemeId = scheme.id, scanSummary = summary)
     }
 
@@ -229,7 +212,6 @@ object ImageRepository {
     suspend fun scanConfiguredPaths(
         scheme: ScanSchemeEntity,
         minFileSizeKb: Int,
-        sortType: Int,
         preferShizuku: Boolean
     ): ScanSummary = withContext(Dispatchers.IO) {
         val pathConfigs = scanPathDao.getEnabledByScheme(scheme.id)
@@ -238,7 +220,6 @@ object ImageRepository {
         }
 
         val minSizeBytes = minFileSizeKb.toLong() * 1024L
-        sortValue = sortType
         val useShizuku = preferShizuku &&
             hua.dy.image.utils.ShizukuUtils.isShizukuAvailable &&
             hua.dy.image.utils.ShizukuUtils.isShizukuPermission &&
@@ -257,12 +238,8 @@ object ImageRepository {
         return dir
     }
 
-    private suspend fun clearAllDatabaseContent() {
-        dyImageDb.withTransaction {
-            dyImageDao.deleteAll()
-            scanPathDao.deleteAll()
-            scanSchemeDao.deleteAll()
-        }
+    private suspend fun clearScannedImageData() {
+        dyImageDao.deleteAll()
     }
 
     private fun clearImageCacheFiles() {

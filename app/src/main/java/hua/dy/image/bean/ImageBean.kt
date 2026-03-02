@@ -13,6 +13,12 @@ val ImageBean.isWebp get() = fileType == FileType.WEBP
 val ImageBean.isHeic get() = fileType == FileType.HEIC
 val ImageBean.isVvic get() = fileType == FileType.VVIC
 
+private fun decodeFileType(rawType: String?): FileType {
+    return rawType?.let {
+        FileType.entries.firstOrNull { type -> type.name == rawType } ?: FileType.PNG
+    } ?: FileType.PNG
+}
+
 
 @Entity("dy_image")
 data class ImageBean(
@@ -40,7 +46,7 @@ data class ImageBean(
         parcel.readString() ?:"",
         parcel.readLong(),
         parcel.readLong(),
-        parcel.readSerializable() as FileType,
+        decodeFileType(parcel.readString()),
         parcel.readString() ?: "",
         parcel.readString() ?:"",
         parcel.readLong(),
@@ -56,7 +62,7 @@ data class ImageBean(
         dest.writeString(imagePath)
         dest.writeLong(fileLength)
         dest.writeLong(fileTime)
-        dest.writeSerializable(fileType)
+        dest.writeString(fileType.name)
         dest.writeString(fileName)
         dest.writeString(secondMenu)
         dest.writeLong(scanTime)

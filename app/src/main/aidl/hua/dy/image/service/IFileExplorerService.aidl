@@ -3,7 +3,6 @@ package hua.dy.image.service;
 
 import hua.dy.image.bean.FileBean;
 import hua.dy.image.bean.ImageBean;
-import hua.dy.image.app.AppBean;
 
 // Declare any non-default types here with import statements
 

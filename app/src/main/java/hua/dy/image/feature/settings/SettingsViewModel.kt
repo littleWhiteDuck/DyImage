@@ -69,12 +69,11 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch {
             _isClearing.value = true
             try {
-                _messageFlow.emit("正在清空数据库与缓存并重新扫描…")
+                _messageFlow.emit("正在清空扫描数据与缓存并重新扫描…")
                 val settings = uiState.value
                 val result = ImageRepository.clearAllDatabaseAndRescan(
                     preferredSchemeId = settings.activeSchemeId,
                     minSizeKb = settings.minScanFileSizeKb,
-                    sortType = settings.sortType,
                     preferShizuku = settings.preferShizuku
                 )
                 if (result.schemeId != settings.activeSchemeId) {

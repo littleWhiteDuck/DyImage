@@ -266,7 +266,7 @@ fun SettingsScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("清理数据库并重扫")
+                                Text("清空扫描数据并重扫")
                             }
                         }
                     }
@@ -301,8 +301,8 @@ fun SettingsScreen(
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
-            title = { Text("清理数据库并重扫") },
-            text = { Text("此操作会清空所有数据库内容与缓存图片，然后立即重新扫描，可能耗时较长。") },
+            title = { Text("清空扫描数据并重扫") },
+            text = { Text("此操作只会清空扫描产生的图片索引与缓存图片，不会删除路径配置和设置项，然后立即重新扫描。") },
             confirmButton = {
                 TextButton(
                     onClick = {

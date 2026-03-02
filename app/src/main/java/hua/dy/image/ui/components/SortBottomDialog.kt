@@ -1,7 +1,5 @@
 ﻿package hua.dy.image.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,8 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,11 +25,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import hua.dy.image.data.SortOptions
@@ -49,6 +46,7 @@ fun SortBottomDialog(
         dragHandle = {
             Surface(
                 modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
                     .width(32.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp)),
@@ -74,7 +72,7 @@ fun SortBottomDialog(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Outlined.Sort,
+                            imageVector = Icons.AutoMirrored.Outlined.Sort,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(20.dp)
@@ -92,15 +90,6 @@ fun SortBottomDialog(
 
             SortOptions.labels.forEachIndexed { index, name ->
                 val isSelected = sortValue == index
-                val backgroundColor by animateColorAsState(
-                    targetValue = if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    } else {
-                        Color.Transparent
-                    },
-                    animationSpec = tween(200),
-                    label = "sort_item_bg"
-                )
 
                 Card(
                     modifier = Modifier
@@ -108,8 +97,8 @@ fun SortBottomDialog(
                         .padding(vertical = 4.dp)
                         .clickable { onclick(index) },
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 2.dp else 0.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 1.dp else 0.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -123,22 +112,22 @@ fun SortBottomDialog(
                             style = MaterialTheme.typography.bodyLarge.copy(
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             ),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (isSelected) {
-                            Surface(
-                                modifier = Modifier.size(24.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Check,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                        Surface(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .alpha(if (isSelected) 1f else 0.18f),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }

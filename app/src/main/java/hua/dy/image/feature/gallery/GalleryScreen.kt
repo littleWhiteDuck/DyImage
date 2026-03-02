@@ -29,10 +29,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.ImageNotSupported
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,8 +50,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -215,7 +215,7 @@ fun GalleryScreen(
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.Sort,
+                                imageVector = Icons.AutoMirrored.Outlined.Sort,
                                 contentDescription = "排序",
                                 modifier = Modifier.size(20.dp)
                             )
@@ -304,21 +304,19 @@ fun GalleryScreen(
                 tonalElevation = 2.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                androidx.compose.material3.ScrollableTabRow(
+                SecondaryScrollableTabRow(
                     selectedTabIndex = pagerState.currentPage,
                     edgePadding = 16.dp,
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.primary,
-                    indicator = { tabPositions ->
-                        if (tabPositions.isNotEmpty()) {
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier
-                                    .tabIndicatorOffset(tabPositions[pagerState.currentPage])
-                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
-                                height = 3.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    indicator = {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier
+                                .tabIndicatorOffset(selectedTabIndex = pagerState.currentPage)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
+                            height = 3.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 ) {
                     types.forEachIndexed { index, type ->
