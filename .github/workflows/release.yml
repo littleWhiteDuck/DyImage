@@ -1,0 +1,76 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure origin/main ref for versionCode
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Prepare signing files
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEYSTORE_BASE64}" ] || [ -z "${SIGNING_STORE_PASSWORD}" ] || [ -z "${SIGNING_KEY_ALIAS}" ] || [ -z "${SIGNING_KEY_PASSWORD}" ]; then
+            echo "Missing signing secrets. Please configure SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD."
+            exit 1
+          fi
+
+          echo "${SIGNING_KEYSTORE_BASE64}" | base64 --decode > "${GITHUB_WORKSPACE}/release.keystore"
+
+          {
+            echo "alias=${SIGNING_KEY_ALIAS}"
+            echo "keyPassword=${SIGNING_KEY_PASSWORD}"
+            echo "password=${SIGNING_STORE_PASSWORD}"
+            echo "file=${GITHUB_WORKSPACE}/release.keystore"
+          } > "${GITHUB_WORKSPACE}/sign.properties"
+
+      - name: Build release APKs (split by ABI)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Verify APK outputs
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          apks=(app/build/outputs/apk/release/**/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "No APK files found under app/build/outputs/apk/release/"
+            exit 1
+          fi
+          printf 'Found APKs:\n%s\n' "${apks[@]}"
+
+      - name: Create GitHub Release and upload APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            app/build/outputs/apk/release/**/*.apk
