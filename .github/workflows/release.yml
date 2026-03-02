@@ -29,6 +29,14 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses and install required NDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager --install "ndk;29.0.14033849"
+
       - name: Prepare signing files
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
