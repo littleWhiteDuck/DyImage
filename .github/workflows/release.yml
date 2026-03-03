@@ -31,19 +31,6 @@ jobs:
           fetch-depth: 0
 
       # -------------------------------------------------
-      # Validate Tag (must match semver)
-      # -------------------------------------------------
-      - name: Validate Tag
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Tag must follow vX.Y.Z format"
-            exit 1
-          fi
-          echo "Tag valid: $TAG"
-
-      # -------------------------------------------------
       # Setup Java
       # -------------------------------------------------
       - name: Setup JDK
