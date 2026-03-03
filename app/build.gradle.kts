@@ -42,6 +42,12 @@ android {
             arg("room.schemaLocation", "$projectDir/schemas")
         }
 
+        externalNativeBuild {
+            cmake {
+                abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            }
+        }
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -57,9 +63,6 @@ android {
             }
         }
 
-        /*ndk {
-            abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
-        }*/
     }
 
     externalNativeBuild {
