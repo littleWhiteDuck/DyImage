@@ -1,4 +1,4 @@
-name: release
+name: Android Production Release
 
 on:
   push:
@@ -8,36 +8,66 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      ANDROID_NDK_VERSION: 29.0.14033849
+      JAVA_VERSION: 17
 
     steps:
+      # -------------------------------------------------
+      # Checkout
+      # -------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Ensure origin/main ref for versionCode
+      # -------------------------------------------------
+      # Validate Tag (must match semver)
+      # -------------------------------------------------
+      - name: Validate Tag
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Tag must follow vX.Y.Z format"
+            exit 1
+          fi
+          echo "Tag valid: $TAG"
 
-      - name: Setup JDK 17
+      # -------------------------------------------------
+      # Setup Java
+      # -------------------------------------------------
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
+      # -------------------------------------------------
+      # Setup Android SDK
+      # -------------------------------------------------
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          ndk-version: "29.0.14033849"
-          packages: |
-            build-tools;34.0.0
-            platforms;android-34
+          ndk-version: ${{ env.ANDROID_NDK_VERSION }}
+          packages:
+            - build-tools;34.0.0
+            - platforms;android-34
 
+      # -------------------------------------------------
+      # Prepare Signing
+      # -------------------------------------------------
       - name: Prepare signing files
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
@@ -46,58 +76,182 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          required_secrets=("SIGNING_KEYSTORE_BASE64" "SIGNING_STORE_PASSWORD" "SIGNING_KEY_ALIAS" "SIGNING_KEY_PASSWORD")
-          missing_secrets=()
-          for secret in "${required_secrets[@]}"; do
-            if [ -z "${!secret}" ]; then
-              missing_secrets+=("$secret")
+
+          required=(
+            SIGNING_KEYSTORE_BASE64
+            SIGNING_STORE_PASSWORD
+            SIGNING_KEY_ALIAS
+            SIGNING_KEY_PASSWORD
+          )
+
+          for s in "${required[@]}"; do
+            if [ -z "${!s:-}" ]; then
+              echo "❌ Missing secret: $s"
+              exit 1
             fi
           done
-          
-          if [ ${#missing_secrets[@]} -gt 0 ]; then
-            echo "Error: Missing required secrets: ${missing_secrets[*]}"
-            exit 1
-          fi
 
-          echo "${SIGNING_KEYSTORE_BASE64}" | base64 --decode > "${GITHUB_WORKSPACE}/release.keystore"
-          if [ ! -f "${GITHUB_WORKSPACE}/release.keystore" ]; then
-            echo "Error: Keystore file not created successfully"
-            exit 1
-          fi
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 --decode > release.keystore
 
-          {
-            echo "alias=${SIGNING_KEY_ALIAS}"
-            echo "keyPassword=${SIGNING_KEY_PASSWORD}"
-            echo "password=${SIGNING_STORE_PASSWORD}"
-            echo "file=${GITHUB_WORKSPACE}/release.keystore"
-          } > "${GITHUB_WORKSPACE}/sign.properties"
+          cat > sign.properties <<EOF
+          alias=$SIGNING_KEY_ALIAS
+          keyPassword=$SIGNING_KEY_PASSWORD
+          password=$SIGNING_STORE_PASSWORD
+          file=$(pwd)/release.keystore
+          EOF
 
-      - name: Build release APKs (split by ABI)
+      # -------------------------------------------------
+      # Build
+      # -------------------------------------------------
+      - name: Build Release (AAB + APK)
         run: |
+          set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          ./gradlew \
+            :app:bundleRelease \
+            :app:assembleRelease \
+            --no-daemon \
+            --stacktrace
         env:
-          ANDROID_NDK_HOME: $ANDROID_SDK_ROOT/ndk/29.0.14033849
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/${{ env.ANDROID_NDK_VERSION }}
 
-      - name: Verify APK outputs
-        id: verify_apks
+      # -------------------------------------------------
+      # Collect Artifacts
+      # -------------------------------------------------
+      - name: Collect Artifacts
+        id: artifacts
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
-          apks=(app/build/outputs/apk/release/*-release.apk)
-          if [ ${#apks[@]} -eq 0 ]; then
-            echo "Error: No valid release APK files found under app/build/outputs/apk/release/"
-            echo "Found files:"
-            ls -la app/build/outputs/apk/release/
+
+          files=()
+
+          for f in app/build/outputs/apk/release/*-release.apk; do
+            [ -f "$f" ] && files+=("$f")
+          done
+
+          for f in app/build/outputs/bundle/release/*.aab; do
+            [ -f "$f" ] && files+=("$f")
+          done
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "❌ No release artifacts found"
             exit 1
           fi
-          printf 'Found valid release APKs:\n%s\n' "${apks[@]}"
-          echo "apks=$(printf "%s\n" "${apks[@]}" | jq -R . | jq -s .)" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release and upload APKs
+          echo "Generating SHA256 checksums..."
+          for f in "${files[@]}"; do
+            sha256sum "$f" > "$f.sha256"
+            files+=("$f.sha256")
+          done
+
+          printf '%s\n' "${files[@]}"
+
+          json=$(printf '%s\n' "${files[@]}" | sed 's/.*/"&"/' | paste -sd, -)
+          echo "files=[$json]" >> "$GITHUB_OUTPUT"
+
+      # -------------------------------------------------
+      # Generate Advanced Changelog
+      # -------------------------------------------------
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          set -euo pipefail
+
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -A1 "^${CURRENT_TAG}$" | tail -n1 || true)
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            RANGE=""
+          else
+            RANGE="${PREVIOUS_TAG}..${CURRENT_TAG}"
+          fi
+
+          COMMITS=$(git log ${RANGE:-} --pretty=format:"%s")
+
+          BREAKING=$(echo "$COMMITS" | grep -i 'BREAKING CHANGE' || true)
+          FEAT=$(echo "$COMMITS" | grep -i '^feat' || true)
+          FIX=$(echo "$COMMITS" | grep -i '^fix' || true)
+          PERF=$(echo "$COMMITS" | grep -i '^perf' || true)
+          REFACTOR=$(echo "$COMMITS" | grep -i '^refactor' || true)
+          DOCS=$(echo "$COMMITS" | grep -i '^docs' || true)
+          OTHERS=$(echo "$COMMITS" | grep -viE '^(feat|fix|perf|refactor|docs)' || true)
+
+          {
+            echo "changelog<<EOF"
+            echo "## 🚀 ${CURRENT_TAG}"
+            echo ""
+
+            if [ -n "$BREAKING" ]; then
+              echo "### ⚠ Breaking Changes"
+              echo "$BREAKING" | sed 's/^/- /'
+              echo ""
+            fi
+
+            if [ -n "$FEAT" ]; then
+              echo "### ✨ Features"
+              echo "$FEAT" | sed 's/^/- /'
+              echo ""
+            fi
+
+            if [ -n "$FIX" ]; then
+              echo "### 🐛 Fixes"
+              echo "$FIX" | sed 's/^/- /'
+              echo ""
+            fi
+
+            if [ -n "$PERF" ]; then
+              echo "### ⚡ Performance"
+              echo "$PERF" | sed 's/^/- /'
+              echo ""
+            fi
+
+            if [ -n "$REFACTOR" ]; then
+              echo "### 🔧 Refactor"
+              echo "$REFACTOR" | sed 's/^/- /'
+              echo ""
+            fi
+
+            if [ -n "$DOCS" ]; then
+              echo "### 📝 Documentation"
+              echo "$DOCS" | sed 's/^/- /'
+              echo ""
+            fi
+
+            if [ -n "$OTHERS" ]; then
+              echo "### 📦 Others"
+              echo "$OTHERS" | sed 's/^/- /'
+              echo ""
+            fi
+
+            echo "---"
+            echo "Full Diff:"
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${CURRENT_TAG}"
+            else
+              echo "Initial Release"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # -------------------------------------------------
+      # Create GitHub Release
+      # -------------------------------------------------
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          files: ${{ fromJSON(steps.verify_apks.outputs.apks) }}
-        if: steps.verify_apks.outcome == 'success'
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: ${{ fromJSON(steps.artifacts.outputs.files) }}
+
+      # -------------------------------------------------
+      # Upload logs if failed
+      # -------------------------------------------------
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            **/build/reports/**
+            **/build/outputs/logs/**

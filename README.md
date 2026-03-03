@@ -1,11 +1,17 @@
-# DyImage
+# EImage
 
 ### 更新内容：
+> 需要使用Shizuku授权使用
 
-1. 调整了部分UI（排序弹窗显示不全）
-2. 增加了Webp分类
-3. 支持：先将Webp转为GIF后(不支持alpha通道)，再进行分享
-4. 更改包名为hua.dy.image2(原：hua.dy.image2)
+- 调整了部分UI（排序弹窗显示不全）
+- 增加了Webp分类
+- 支持：先将Webp转为GIF后(不支持alpha通道)，再进行分享
+- 更改包名为hua.dy.image2(原：hua.dy.image)
+- 支持将heic动图转为GIF(使用ffmpeg，体积增大)
+- 名字更改为EImage，现在可以自定义扫描路径方案
+- 使用AI优化了UI和逻辑
+- 支持多选分享、多选webp转gif、多选heic动图转gif
+- 新增vvic分类(火山引擎的veImageX)，无法预览图片，可分享至抖音查看图片
 
 ---
 
