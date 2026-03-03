@@ -141,8 +141,11 @@ jobs:
 
           printf '%s\n' "${files[@]}"
 
-          json=$(printf '%s\n' "${files[@]}" | sed 's/.*/"&"/' | paste -sd, -)
-          echo "files=[$json]" >> "$GITHUB_OUTPUT"
+          {
+            echo "files<<EOF"
+            printf '%s\n' "${files[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # -------------------------------------------------
       # Generate Advanced Changelog
@@ -236,7 +239,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           body: ${{ steps.changelog.outputs.changelog }}
-          files: ${{ fromJSON(steps.artifacts.outputs.files) }}
+          files: ${{ steps.artifacts.outputs.files }}
 
       # -------------------------------------------------
       # Upload logs if failed
