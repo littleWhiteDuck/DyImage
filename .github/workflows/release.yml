@@ -93,9 +93,17 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
+
+          # AAB cannot be built together with multi-ABI APK splits.
           ./gradlew \
             :app:bundleRelease \
+            -PenableAbiSplits=false \
+            --no-daemon \
+            --stacktrace
+
+          ./gradlew \
             :app:assembleRelease \
+            -PenableAbiSplits=true \
             --no-daemon \
             --stacktrace
         env:
@@ -112,7 +120,7 @@ jobs:
 
           files=()
 
-          for f in app/build/outputs/apk/release/*-release.apk; do
+          for f in app/build/outputs/apk/release/**/*.apk; do
             [ -f "$f" ] && files+=("$f")
           done
 

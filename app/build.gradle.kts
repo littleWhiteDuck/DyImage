@@ -17,6 +17,11 @@ prop.load(FileInputStream(configFile))
 val repo = jgit.repo()
 val verCode = (repo?.commitCount("refs/remotes/origin/main") ?: 1)
 val verName = repo?.latestTag?.removePrefix("v") ?: "0.1"
+val enableAbiSplits = providers
+    .gradleProperty("enableAbiSplits")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(true)
+    .get()
 
 android {
     namespace = "hua.dy.image"
@@ -108,7 +113,7 @@ android {
     }
     splits {
         abi {
-            isEnable = true
+            isEnable = enableAbiSplits
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86_64")
             isUniversalApk = false
