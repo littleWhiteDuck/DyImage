@@ -1,5 +1,6 @@
 ﻿package hua.dy.image.feature.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,13 +9,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Settings
@@ -29,10 +35,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,9 +57,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hua.dy.image.data.SortOptions
@@ -68,7 +76,15 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isClearing by viewModel.isClearing.collectAsState()
-    val minSizeOptions = remember { listOf(2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096) }
+    val minSizeOptions = remember {
+        listOf(2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
+            .map { SettingSelectOption(value = it, label = "$it KB") }
+    }
+    val sortOptions = remember {
+        SortOptions.labels.mapIndexed { index, label ->
+            SettingSelectOption(value = index, label = label)
+        }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showThemeMenu by remember { mutableStateOf(false) }
@@ -76,12 +92,6 @@ fun SettingsScreen(
     var showMinSizeMenu by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
-    val openThemeMenu = { showThemeMenu = true }
-    val closeThemeMenu = { showThemeMenu = false }
-    val openSortMenu = { showSortMenu = true }
-    val closeSortMenu = { showSortMenu = false }
-    val openMinSizeMenu = { showMinSizeMenu = true }
-    val closeMinSizeMenu = { showMinSizeMenu = false }
     val openClearConfirm = { showClearConfirm = true }
     val closeClearConfirm = { showClearConfirm = false }
 
@@ -135,7 +145,7 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(top = innerPadding.calculateTopPadding()),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
@@ -151,28 +161,15 @@ fun SettingsScreen(
                     iconColor = MaterialTheme.colorScheme.primary
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Box {
-                            FilledTonalButton(
-                                onClick = openThemeMenu,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("主题模式：${themeModeText(uiState.themeMode)}")
-                            }
-                            DropdownMenu(
-                                expanded = showThemeMenu,
-                                onDismissRequest = closeThemeMenu
-                            ) {
-                                themeModeOptions().forEach { (mode, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = {
-                                            viewModel.updateThemeMode(mode)
-                                            closeThemeMenu()
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        SettingsDropdownItem(
+                            title = "主题",
+                            subtitle = "选择应用的主题模式",
+                            selectedValue = uiState.themeMode,
+                            options = themeModeOptions(),
+                            expanded = showThemeMenu,
+                            onExpandedChange = { showThemeMenu = it },
+                            onValueSelected = viewModel::updateThemeMode
+                        )
 
                         SettingsItem(
                             title = "跟随系统动态色",
@@ -199,58 +196,25 @@ fun SettingsScreen(
                     iconColor = MaterialTheme.colorScheme.secondary
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Box {
-                            FilledTonalButton(
-                                onClick = openSortMenu,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("默认排序：${SortOptions.labels[uiState.sortType]}")
-                            }
-                            DropdownMenu(
-                                expanded = showSortMenu,
-                                onDismissRequest = closeSortMenu
-                            ) {
-                                SortOptions.labels.forEachIndexed { index, label ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = {
-                                            viewModel.updateSortType(index)
-                                            closeSortMenu()
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        SettingsDropdownItem(
+                            title = "默认排序",
+                            subtitle = "扫描结果默认展示顺序",
+                            selectedValue = uiState.sortType,
+                            options = sortOptions,
+                            expanded = showSortMenu,
+                            onExpandedChange = { showSortMenu = it },
+                            onValueSelected = viewModel::updateSortType
+                        )
 
-                        Box {
-                            FilledTonalButton(
-                                onClick = openMinSizeMenu,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("最小扫描文件大小：${uiState.minScanFileSizeKb} KB")
-                            }
-                            DropdownMenu(
-                                expanded = showMinSizeMenu,
-                                onDismissRequest = closeMinSizeMenu
-                            ) {
-                                minSizeOptions.forEach { size ->
-                                    DropdownMenuItem(
-                                        text = { Text("$size KB") },
-                                        onClick = {
-                                            viewModel.updateMinScanFileSizeKb(size)
-                                            closeMinSizeMenu()
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = { viewModel.updateMinScanFileSizeKb(32) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("恢复默认最小大小（32 KB）")
-                        }
+                        SettingsDropdownItem(
+                            title = "最小扫描大小",
+                            subtitle = "小于该值的文件将被忽略",
+                            selectedValue = uiState.minScanFileSizeKb,
+                            options = minSizeOptions,
+                            expanded = showMinSizeMenu,
+                            onExpandedChange = { showMinSizeMenu = it },
+                            onValueSelected = viewModel::updateMinScanFileSizeKb
+                        )
 
                         Button(
                             enabled = !isClearing,
@@ -286,7 +250,7 @@ fun SettingsScreen(
                 SettingsCard(
                     title = "高级设置",
                     icon = Icons.Outlined.Tune,
-                    iconColor = MaterialTheme.colorScheme.tertiary
+                    iconColor = MaterialTheme.colorScheme.primary
                 ) {
                     SettingsItem(
                         title = "优先使用 Shizuku 扫描",
@@ -296,8 +260,8 @@ fun SettingsScreen(
                                 checked = uiState.preferShizuku,
                                 onCheckedChange = viewModel::updatePreferShizuku,
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.tertiary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.tertiaryContainer
+                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
                                 )
                             )
                         }
@@ -330,6 +294,12 @@ fun SettingsScreen(
         )
     }
 }
+
+private data class SettingSelectOption<T>(
+    val value: T,
+    val label: String,
+    val supportingText: String? = null
+)
 
 @Composable
 private fun SettingsCard(
@@ -380,6 +350,147 @@ private fun SettingsCard(
 }
 
 @Composable
+private fun <T> SettingsDropdownItem(
+    title: String,
+    subtitle: String? = null,
+    selectedValue: T,
+    options: List<SettingSelectOption<T>>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onValueSelected: (T) -> Unit
+) {
+    val selectedOption = options.firstOrNull { it.value == selectedValue }
+    val selectedLabel = selectedOption?.label ?: ""
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onExpandedChange(true) }
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (expanded) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clickable { onExpandedChange(!expanded) }
+                        .widthIn(min = 108.dp, max = 168.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedLabel,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = if (expanded) FontWeight.SemiBold else FontWeight.Medium
+                        ),
+                        color = if (expanded) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.ArrowDropDown,
+                        contentDescription = null,
+                        tint = if (expanded) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { onExpandedChange(false) },
+                offset = DpOffset(x = 0.dp, y = 4.dp),
+                modifier = Modifier
+                    .widthIn(min = 196.dp)
+                    .heightIn(max = 280.dp)
+            ) {
+                options.forEach { option ->
+                    val isSelected = option.value == selectedValue
+                    DropdownMenuItem(
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = option.label,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                )
+                                option.supportingText?.let { supporting ->
+                                    Text(
+                                        text = supporting,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                tint = if (isSelected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color.Transparent
+                                }
+                            )
+                        },
+                        colors = MenuDefaults.itemColors(
+                            textColor = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            leadingIconColor = MaterialTheme.colorScheme.primary
+                        ),
+                        onClick = {
+                            onValueSelected(option.value)
+                            onExpandedChange(false)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SettingsItem(
     title: String,
     subtitle: String? = null,
@@ -409,18 +520,22 @@ private fun SettingsItem(
     }
 }
 
-private fun themeModeOptions(): List<Pair<ThemeMode, String>> {
+private fun themeModeOptions(): List<SettingSelectOption<ThemeMode>> {
     return listOf(
-        ThemeMode.System to "跟随系统",
-        ThemeMode.Light to "浅色模式",
-        ThemeMode.Dark to "深色模式"
+        SettingSelectOption(
+            value = ThemeMode.System,
+            label = "跟随系统",
+            supportingText = "使用系统亮色/暗色设置"
+        ),
+        SettingSelectOption(
+            value = ThemeMode.Light,
+            label = "浅色",
+            supportingText = "始终使用浅色主题"
+        ),
+        SettingSelectOption(
+            value = ThemeMode.Dark,
+            label = "深色",
+            supportingText = "始终使用深色主题"
+        )
     )
-}
-
-private fun themeModeText(mode: ThemeMode): String {
-    return when (mode) {
-        ThemeMode.System -> "跟随系统"
-        ThemeMode.Light -> "浅色"
-        ThemeMode.Dark -> "深色"
-    }
 }

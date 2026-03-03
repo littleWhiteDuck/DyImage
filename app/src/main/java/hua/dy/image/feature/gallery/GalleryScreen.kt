@@ -484,7 +484,7 @@ fun GalleryScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             if (!selectionMode && !selectedFilter.isAll) {
                 Surface(

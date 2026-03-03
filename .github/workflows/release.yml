@@ -31,11 +31,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses and install required NDK
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install "ndk;29.0.14033849"
+        with:
+          accept-android-sdk-licenses: true
+          ndk-version: "29.0.14033849"
+          packages: |
+            build-tools;34.0.0
+            platforms;android-34
 
       - name: Prepare signing files
         env:
@@ -45,12 +46,24 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${SIGNING_KEYSTORE_BASE64}" ] || [ -z "${SIGNING_STORE_PASSWORD}" ] || [ -z "${SIGNING_KEY_ALIAS}" ] || [ -z "${SIGNING_KEY_PASSWORD}" ]; then
-            echo "Missing signing secrets. Please configure SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD."
+          required_secrets=("SIGNING_KEYSTORE_BASE64" "SIGNING_STORE_PASSWORD" "SIGNING_KEY_ALIAS" "SIGNING_KEY_PASSWORD")
+          missing_secrets=()
+          for secret in "${required_secrets[@]}"; do
+            if [ -z "${!secret}" ]; then
+              missing_secrets+=("$secret")
+            fi
+          done
+          
+          if [ ${#missing_secrets[@]} -gt 0 ]; then
+            echo "Error: Missing required secrets: ${missing_secrets[*]}"
             exit 1
           fi
 
           echo "${SIGNING_KEYSTORE_BASE64}" | base64 --decode > "${GITHUB_WORKSPACE}/release.keystore"
+          if [ ! -f "${GITHUB_WORKSPACE}/release.keystore" ]; then
+            echo "Error: Keystore file not created successfully"
+            exit 1
+          fi
 
           {
             echo "alias=${SIGNING_KEY_ALIAS}"
@@ -62,23 +75,29 @@ jobs:
       - name: Build release APKs (split by ABI)
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleRelease --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        env:
+          ANDROID_NDK_HOME: $ANDROID_SDK_ROOT/ndk/29.0.14033849
 
       - name: Verify APK outputs
+        id: verify_apks
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
-          apks=(app/build/outputs/apk/release/**/*.apk)
+          apks=(app/build/outputs/apk/release/*-release.apk)
           if [ ${#apks[@]} -eq 0 ]; then
-            echo "No APK files found under app/build/outputs/apk/release/"
+            echo "Error: No valid release APK files found under app/build/outputs/apk/release/"
+            echo "Found files:"
+            ls -la app/build/outputs/apk/release/
             exit 1
           fi
-          printf 'Found APKs:\n%s\n' "${apks[@]}"
+          printf 'Found valid release APKs:\n%s\n' "${apks[@]}"
+          echo "apks=$(printf "%s\n" "${apks[@]}" | jq -R . | jq -s .)" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release and upload APKs
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: |
-            app/build/outputs/apk/release/**/*.apk
+          files: ${{ fromJSON(steps.verify_apks.outputs.apks) }}
+        if: steps.verify_apks.outcome == 'success'

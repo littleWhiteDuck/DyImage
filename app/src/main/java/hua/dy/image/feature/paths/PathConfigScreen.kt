@@ -170,7 +170,7 @@ fun PathConfigScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(top = innerPadding.calculateTopPadding()),
             contentPadding = PaddingValues(
                 top = 16.dp,
                 bottom = contentPadding.calculateBottomPadding() + 88.dp,
