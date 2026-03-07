@@ -33,7 +33,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.ImageNotSupported
 import androidx.compose.material.icons.outlined.Refresh
@@ -145,6 +144,7 @@ fun GalleryScreen(
     var selectionMode by remember { mutableStateOf(false) }
     var batchJob by remember { mutableStateOf<Job?>(null) }
     val selectedItems = remember { mutableStateMapOf<String, MultiSelectedImage>() }
+    val pageSnapshotItems = remember { mutableStateMapOf<Int, List<ImageBean>>() }
     val convertedGifByMd5 = remember { mutableStateMapOf<String, String>() }
     val failedConvertByMd5 = remember { mutableStateMapOf<String, Boolean>() }
     val batchWorking = batchJob?.isActive == true
@@ -196,6 +196,50 @@ fun GalleryScreen(
         }
     }
 
+    fun selectAllInCurrentPage() {
+        val currentPageItems = pageSnapshotItems[pagerState.currentPage].orEmpty()
+        if (currentPageItems.isEmpty()) {
+            scope.launch {
+                snackBarHostState.showSnackbar("当前页暂无可选择项")
+            }
+            return
+        }
+        currentPageItems.forEach { item ->
+            if (!selectedItems.containsKey(item.md5)) {
+                selectedItems[item.md5] = MultiSelectedImage(
+                    md5 = item.md5,
+                    imagePath = item.imagePath,
+                    fileType = item.fileType
+                )
+            }
+        }
+        selectionMode = selectedItems.isNotEmpty()
+    }
+
+    fun invertSelectionInCurrentPage() {
+        val currentPageItems = pageSnapshotItems[pagerState.currentPage].orEmpty()
+        if (currentPageItems.isEmpty()) {
+            scope.launch {
+                snackBarHostState.showSnackbar("当前页暂无可选择项")
+            }
+            return
+        }
+        currentPageItems.forEach { item ->
+            if (selectedItems.containsKey(item.md5)) {
+                selectedItems.remove(item.md5)
+                convertedGifByMd5.remove(item.md5)
+                failedConvertByMd5.remove(item.md5)
+            } else {
+                selectedItems[item.md5] = MultiSelectedImage(
+                    md5 = item.md5,
+                    imagePath = item.imagePath,
+                    fileType = item.fileType
+                )
+            }
+        }
+        selectionMode = selectedItems.isNotEmpty()
+    }
+
     val imageLoader = remember(context) {
         ImageLoader.Builder(context)
             .components { add(GifDecoder.Factory()) }
@@ -220,6 +264,10 @@ fun GalleryScreen(
         if (selectionMode) {
             clearSelectionState()
         }
+    }
+
+    LaunchedEffect(activeScheme.id, selectedFilter.path, sortType) {
+        pageSnapshotItems.clear()
     }
 
     LaunchedEffect(selectionMode) {
@@ -265,18 +313,22 @@ fun GalleryScreen(
                 },
                 actions = {
                     if (selectionMode) {
-                        TextButton(
-                            enabled = !batchWorking,
-                            onClick = { clearSelectionState() },
-                            modifier = Modifier.padding(end = 12.dp)
+                        Row(
+                            modifier = Modifier.padding(end = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.size(6.dp))
-                            Text("退出多选")
+                            TextButton(
+                                enabled = !batchWorking,
+                                onClick = { selectAllInCurrentPage() }
+                            ) {
+                                Text("全选")
+                            }
+                            TextButton(
+                                enabled = !batchWorking,
+                                onClick = { invertSelectionInCurrentPage() }
+                            ) {
+                                Text("反选")
+                            }
                         }
                     } else {
                         Row(
@@ -574,6 +626,11 @@ fun GalleryScreen(
             ) { page ->
                 val type = types[page]
                 val imageData = viewModel.pagedImagesForType(type).collectAsLazyPagingItems()
+                val snapshotItems = imageData.itemSnapshotList.items
+
+                LaunchedEffect(page, snapshotItems) {
+                    pageSnapshotItems[page] = snapshotItems
+                }
 
                 if (!permissionState) {
                     PermissionRequiredPane(
